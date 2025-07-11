@@ -3,6 +3,7 @@ import re
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
+from matplotlib.lines import Line2D
 
 # Usage: python3 visualize_paths.py [path_file]
 
@@ -58,13 +59,13 @@ def animate_paths(paths, starts, goals, nrows, ncols):
     agent_texts = [ax.text(0, 0, str(i), color='white', fontsize=8, ha='center', va='center', weight='bold', zorder=4) for i in range(n_agents)]
 
     # Legend: one entry per agent
-    handles = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=colors(i), markersize=10, label=f'Agent {i}') for i in range(n_agents)]
+    handles = [Line2D([0], [0], marker='o', color='w', markerfacecolor=colors(i), markersize=10, label=f'Agent {i}') for i in range(n_agents)]
     ax.legend(handles=handles, loc='upper right', bbox_to_anchor=(1.15, 1.0), fontsize='small', title='Agents')
 
     def update(frame):
         for i, path in enumerate(paths):
             pos = path[min(frame, len(path)-1)]
-            agent_dots[i].set_data(pos[1], pos[0])
+            agent_dots[i].set_data([pos[1]], [pos[0]])
             # Trail
             trail = path[:min(frame+1, len(path))]
             if len(trail) > 1:
