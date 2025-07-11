@@ -47,7 +47,7 @@ int main(int argc, char** argv)
     int screen = vm["screen"].as<int>();
 	srand(vm["seed"].as<int>());
 
-    // Only allow LNS(PP;PP)
+    // Only allow LNS
     string solver = "LNS";
     string initAlgo = "PP";
     string replanAlgo = "PP";

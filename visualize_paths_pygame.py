@@ -4,7 +4,7 @@ import pygame
 import time
 import numpy as np
 
-# Usage: python3 visualize_paths_pygame.py [path_file]
+# Usage: python3 visualize_paths_pygame.py [path_file] [map_file]
 
 def parse_paths(filename):
     paths = []
@@ -28,6 +28,25 @@ def parse_paths(filename):
             paths.append(path)
     return paths, starts, goals, max_row + 1, max_col + 1
 
+def parse_map(map_filename):
+    obstacles = set()
+    nrows = ncols = 0
+    with open(map_filename, 'r') as f:
+        lines = f.readlines()
+        for i, line in enumerate(lines):
+            if line.startswith('height'):
+                nrows = int(line.strip().split()[1])
+            elif line.startswith('width'):
+                ncols = int(line.strip().split()[1])
+            elif line.strip() == 'map':
+                map_start = i + 1
+                break
+        for r, line in enumerate(lines[map_start:map_start + nrows]):
+            for c, ch in enumerate(line.strip()):
+                if ch == '@':
+                    obstacles.add((r, c))
+    return obstacles, nrows, ncols
+
 def draw_grid(screen, nrows, ncols, cell_size, margin, grid_color):
     for x in range(ncols + 1):
         pygame.draw.line(screen, grid_color, (margin + x * cell_size, margin), (margin + x * cell_size, margin + nrows * cell_size), 1)
@@ -46,7 +65,7 @@ def get_agent_colors(n_agents):
         colors.append(base_colors[i % len(base_colors)])
     return colors
 
-def animate_paths_pygame(paths, starts, goals, nrows, ncols):
+def animate_paths_pygame(paths, starts, goals, nrows, ncols, obstacles):
     pygame.init()
     info = pygame.display.Info()
     screen_w, screen_h = info.current_w, info.current_h
@@ -94,6 +113,9 @@ def animate_paths_pygame(paths, starts, goals, nrows, ncols):
         if not paused:
             frame = (frame + 1) % makespan
         screen.fill(bg_color)
+        # Draw obstacles
+        for (r, c) in obstacles:
+            pygame.draw.rect(screen, (0, 0, 0), (margin + c * cell_size, margin + r * cell_size, cell_size, cell_size))
         draw_grid(screen, nrows, ncols, cell_size, margin, grid_color)
         # Draw start and goal markers
         for i, (s, g) in enumerate(zip(starts, goals)):
@@ -147,8 +169,11 @@ def animate_paths_pygame(paths, starts, goals, nrows, ncols):
 
 def main():
     path_file = sys.argv[1] if len(sys.argv) > 1 else 'paths.txt'
-    paths, starts, goals, nrows, ncols = parse_paths(path_file)
-    animate_paths_pygame(paths, starts, goals, nrows, ncols)
+    map_file = sys.argv[2] if len(sys.argv) > 2 else 'random-32-32-20.map'
+    obstacles, nrows, ncols = parse_map(map_file)
+    paths, starts, goals, nrows_p, ncols_p = parse_paths(path_file)
+    # Use map file's nrows/ncols for grid size
+    animate_paths_pygame(paths, starts, goals, nrows, ncols, obstacles)
 
 if __name__ == '__main__':
-    main() 
+    main()

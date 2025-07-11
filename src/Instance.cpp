@@ -249,58 +249,77 @@ void Instance::generateConnectedRandomGrid(int rows, int cols, int obstacles)
 
 bool Instance::loadMap()
 {
-	using namespace boost;
-	using namespace std;
-	ifstream myfile(map_fname.c_str());
-	if (!myfile.is_open())
-		return false;
-	string line;
-	tokenizer< char_separator<char> >::iterator beg;
-	getline(myfile, line);
-	if (line[0] == 't') // Nathan's benchmark
-	{
+    using namespace boost;
+    using namespace std;
+    ifstream myfile(map_fname.c_str());
+    if (!myfile.is_open())
+        return false;
+    string line;
+    tokenizer< char_separator<char> >::iterator beg;
+    getline(myfile, line);
+    if (line.substr(0, 10) == "type octile") // MovingAI warehouse map
+    {
+        nathan_benchmark = true; // treat as benchmark for output
+        int height = 0, width = 0;
+        while (getline(myfile, line)) {
+            if (line.substr(0, 6) == "height") {
+                height = atoi(line.substr(7).c_str());
+            } else if (line.substr(0, 5) == "width") {
+                width = atoi(line.substr(6).c_str());
+            } else if (line == "map") {
+                break;
+            }
+        }
+        num_of_rows = height;
+        num_of_cols = width;
+        map_size = num_of_cols * num_of_rows;
+        my_map.resize(map_size, false);
+        for (int i = 0; i < num_of_rows; i++) {
+            getline(myfile, line);
+            for (int j = 0; j < num_of_cols; j++) {
+                my_map[linearizeCoordinate(i, j)] = (line[j] != '.'); // '.' is free, others are obstacles
+            }
+        }
+        myfile.close();
+        return true;
+    }
+    else if (line[0] == 't') // Nathan's benchmark
+    {
         nathan_benchmark = true;
-		char_separator<char> sep(" ");
-		getline(myfile, line);
-		tokenizer< char_separator<char> > tok(line, sep);
-		beg = tok.begin();
-		beg++;
-		num_of_rows = atoi((*beg).c_str()); // read number of rows
-		getline(myfile, line);
-		tokenizer< char_separator<char> > tok2(line, sep);
-		beg = tok2.begin();
-		beg++;
-		num_of_cols = atoi((*beg).c_str()); // read number of cols
-		getline(myfile, line); // skip "map"
-	}
-	else // my benchmark
-	{
+        char_separator<char> sep(" ");
+        getline(myfile, line);
+        tokenizer< char_separator<char> > tok(line, sep);
+        beg = tok.begin();
+        beg++;
+        num_of_rows = atoi((*beg).c_str()); // read number of rows
+        getline(myfile, line);
+        tokenizer< char_separator<char> > tok2(line, sep);
+        beg = tok2.begin();
+        beg++;
+        num_of_cols = atoi((*beg).c_str()); // read number of cols
+        getline(myfile, line); // skip "map"
+    }
+    else // my benchmark
+    {
         nathan_benchmark = false;
-		char_separator<char> sep(",");
-		tokenizer< char_separator<char> > tok(line, sep);
-		beg = tok.begin();
-		num_of_rows = atoi((*beg).c_str()); // read number of rows
-		beg++;
-		num_of_cols = atoi((*beg).c_str()); // read number of cols
-	}
-	map_size = num_of_cols * num_of_rows;
-	my_map.resize(map_size, false);
-	// read map (and start/goal locations)
-	for (int i = 0; i < num_of_rows; i++) {
-		getline(myfile, line);
-		for (int j = 0; j < num_of_cols; j++) {
-			my_map[linearizeCoordinate(i, j)] = (line[j] != '.');
-		}
-	}
-	myfile.close();
-
-	// initialize moves_offset array
-	/*moves_offset[Instance::valid_moves_t::WAIT_MOVE] = 0;
-	moves_offset[Instance::valid_moves_t::NORTH] = -num_of_cols;
-	moves_offset[Instance::valid_moves_t::EAST] = 1;
-	moves_offset[Instance::valid_moves_t::SOUTH] = num_of_cols;
-	moves_offset[Instance::valid_moves_t::WEST] = -1;*/
-	return true;
+        char_separator<char> sep(",");
+        tokenizer< char_separator<char> > tok(line, sep);
+        beg = tok.begin();
+        num_of_rows = atoi((*beg).c_str()); // read number of rows
+        beg++;
+        num_of_cols = atoi((*beg).c_str()); // read number of cols
+    }
+    map_size = num_of_cols * num_of_rows;
+    my_map.resize(map_size, false);
+    // read map (and start/goal locations)
+    for (int i = 0; i < num_of_rows; i++) {
+        getline(myfile, line);
+        for (int j = 0; j < num_of_cols; j++) {
+            my_map[linearizeCoordinate(i, j)] = (line[j] != '.');
+        }
+    }
+    myfile.close();
+    return true;
 }
 
 
@@ -347,82 +366,102 @@ void Instance::saveMap() const
 
 bool Instance::loadAgents()
 {
-	using namespace std;
-	using namespace boost;
-
-	string line;
-	ifstream myfile (agent_fname.c_str());
-	if (!myfile.is_open()) 
-	return false;
-
-	getline(myfile, line);
-	if (nathan_benchmark) // Nathan's benchmark
-	{
-		if (num_of_agents == 0)
-		{
-			cerr << "The number of agents should be larger than 0" << endl;
-			exit(-1);
-		}
-		start_locations.resize(num_of_agents);
-		goal_locations.resize(num_of_agents);
-		char_separator<char> sep("\t");
-		for (int i = 0; i < num_of_agents; i++)
-		{
-			getline(myfile, line);
-			if (line.empty())
+    using namespace std;
+    using namespace boost;
+    string line;
+    ifstream myfile (agent_fname.c_str());
+    if (!myfile.is_open()) 
+        return false;
+    getline(myfile, line);
+    if (line.substr(0, 8) == "version 1") // MovingAI .scen format
+    {
+        nathan_benchmark = true; // treat as benchmark for output
+        vector<string> lines;
+        while (getline(myfile, line)) {
+            if (line.empty()) continue;
+            lines.push_back(line);
+        }
+        if (num_of_agents == 0)
+            num_of_agents = (int)lines.size();
+        start_locations.resize(num_of_agents);
+        goal_locations.resize(num_of_agents);
+        for (int i = 0; i < num_of_agents; i++) {
+            istringstream iss(lines[i]);
+            int agent_id, map_cols, map_rows, start_col, start_row, goal_col, goal_row, cost;
+            string map_name;
+            iss >> agent_id >> map_name >> map_cols >> map_rows >> start_col >> start_row >> goal_col >> goal_row >> cost;
+            start_locations[i] = linearizeCoordinate(start_row, start_col);
+            goal_locations[i] = linearizeCoordinate(goal_row, goal_col);
+        }
+        myfile.close();
+        return true;
+    }
+    if (nathan_benchmark) // Nathan's benchmark
+    {
+        if (num_of_agents == 0)
+        {
+            cerr << "The number of agents should be larger than 0" << endl;
+            exit(-1);
+        }
+        start_locations.resize(num_of_agents);
+        goal_locations.resize(num_of_agents);
+        char_separator<char> sep("\t");
+        for (int i = 0; i < num_of_agents; i++)
+        {
+            getline(myfile, line);
+            if (line.empty())
             {
-			    cerr << "Error! The instance has only " << i << " agents" << endl;
-			    exit(-1);
+                cerr << "Error! The instance has only " << i << " agents" << endl;
+                exit(-1);
             }
-			tokenizer< char_separator<char> > tok(line, sep);
-			tokenizer< char_separator<char> >::iterator beg = tok.begin();
-			beg++; // skip the first number
-			beg++; // skip the map name
-			beg++; // skip the columns
-			beg++; // skip the rows
-				   // read start [row,col] for agent i
-			int col = atoi((*beg).c_str());
-			beg++;
-			int row = atoi((*beg).c_str());
-			start_locations[i] = linearizeCoordinate(row, col);
-			// read goal [row,col] for agent i
-			beg++;
-			col = atoi((*beg).c_str());
-			beg++;
-			row = atoi((*beg).c_str());
-			goal_locations[i] = linearizeCoordinate(row, col);
-		}
-	}
-	else // My benchmark
-	{
-		char_separator<char> sep(",");
-		tokenizer< char_separator<char> > tok(line, sep);
-		tokenizer< char_separator<char> >::iterator beg = tok.begin();
-		num_of_agents = atoi((*beg).c_str());
-		start_locations.resize(num_of_agents);
-		goal_locations.resize(num_of_agents);
-		for (int i = 0; i<num_of_agents; i++)
-		{
-			getline(myfile, line);
-			tokenizer< char_separator<char> > col_tok(line, sep);
-			tokenizer< char_separator<char> >::iterator c_beg = col_tok.begin();
-			pair<int, int> curr_pair;
-			// read start [row,col] for agent i
-			int row = atoi((*c_beg).c_str());
-			c_beg++;
-			int col = atoi((*c_beg).c_str());
-			start_locations[i] = linearizeCoordinate(row, col);
-			// read goal [row,col] for agent i
-			c_beg++;
-			row = atoi((*c_beg).c_str());
-			c_beg++;
-			col = atoi((*c_beg).c_str());
-			goal_locations[i] = linearizeCoordinate(row, col);
-		}
-	}
-	myfile.close();
-	return true;
-
+            tokenizer< char_separator<char> > tok(line, sep);
+            tokenizer< char_separator<char> >::iterator beg = tok.begin();
+            beg++; // skip the first number
+            beg++; // skip the map name
+            beg++; // skip the columns
+            beg++; // skip the rows
+            // read start [row,col] for agent i
+            int col = atoi((*beg).c_str());
+            beg++;
+            int row = atoi((*beg).c_str());
+            start_locations[i] = linearizeCoordinate(row, col);
+            // read goal [row,col] for agent i
+            beg++;
+            col = atoi((*beg).c_str());
+            beg++;
+            row = atoi((*beg).c_str());
+            goal_locations[i] = linearizeCoordinate(row, col);
+        }
+    }
+    else // My benchmark
+    {
+        char_separator<char> sep(",");
+        tokenizer< char_separator<char> > tok(line, sep);
+        tokenizer< char_separator<char> >::iterator beg = tok.begin();
+        num_of_agents = atoi((*beg).c_str());
+        start_locations.resize(num_of_agents);
+        goal_locations.resize(num_of_agents);
+        for (int i = 0; i<num_of_agents; i++)
+        {
+            getline(myfile, line);
+            tokenizer< char_separator<char> > col_tok(line, sep);
+            tokenizer< char_separator<char> >::iterator c_beg = col_tok.begin();
+            pair<int, int> curr_pair;
+            // read start [row,col] for agent i
+            int row = atoi((*c_beg).c_str());
+            c_beg++;
+            int col = atoi((*c_beg).c_str());
+            start_locations[i] = linearizeCoordinate(row, col);
+            // read goal [row,col] for agent i
+            c_beg++;
+            row = atoi((*c_beg).c_str());
+            c_beg++;
+            col = atoi((*c_beg).c_str());
+            goal_locations[i] = linearizeCoordinate(row, col);
+        }
+    }
+    myfile.close();
+    return true;
 }
 
 
