@@ -1,5 +1,7 @@
 # MAPF-LNS2 (LNS(PP;PP) Only)
 
+**Note:** A full-featured Python version is being created in the `mapf_lns_py/` directory. See that folder for the new implementation.
+
 This project is now restricted to only support the LNS(PP;PP) case for Multi-Agent Path Finding (MAPF).
 
 ## Usage
