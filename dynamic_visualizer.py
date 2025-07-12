@@ -231,10 +231,15 @@ class DynamicMAPFVisualizer:
         # Add new agent with temporary path
         agent_id = self.next_agent_id
         self.next_agent_id += 1
-        color = self.get_agent_colors(1)[0]
         temp_path = [start]  # Temporary path until replanning
         
-        self.agents.append((start, goal, temp_path, color, agent_id))
+        self.agents.append((start, goal, temp_path, (0,0,0), agent_id))  # Color will be set below
+        
+        # Assign unique colors to all agents
+        colors = self.get_agent_colors(len(self.agents))
+        for i in range(len(self.agents)):
+            start, goal, path, _, agent_id = self.agents[i]
+            self.agents[i] = (start, goal, path, colors[i], agent_id)
         
         # Replan all paths
         self.replan_all_paths()
@@ -279,7 +284,7 @@ class DynamicMAPFVisualizer:
                     print(f"   Edge collision: Agents {collision['agents']} swapping positions {collision['positions']} at timestep {collision['timestep']}")
             return True
         else:
-            print("✅ No collisions detected - all paths are collision-free!")
+            # print("✅ No collisions detected - all paths are collision-free!")
             return False
     
     def replan_all_paths(self):
@@ -303,10 +308,12 @@ class DynamicMAPFVisualizer:
         new_paths = self.call_pathfinder(starts, goals)
         
         if new_paths and len(new_paths) == len(self.agents):
-            # Update paths
-            for i, (start, goal, old_path, color, agent_id) in enumerate(self.agents):
+            # Assign unique colors to all agents
+            colors = self.get_agent_colors(len(self.agents))
+            # Update paths and colors
+            for i, (start, goal, old_path, _, agent_id) in enumerate(self.agents):
                 if i < len(new_paths) and new_paths[i]:
-                    self.agents[i] = (starts[i], goal, new_paths[i], color, agent_id)
+                    self.agents[i] = (starts[i], goal, new_paths[i], colors[i], agent_id)
             
             # Update makespan
             self.makespan = max(len(agent[2]) for agent in self.agents) if self.agents else 1
