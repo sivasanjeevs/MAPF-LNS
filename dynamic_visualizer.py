@@ -12,7 +12,7 @@ import subprocess
 from typing import List, Tuple, Optional
 
 class DynamicMAPFVisualizer:
-    def __init__(self, map_file: str, initial_scen_file: str = None, initial_agent_num: int = 0):
+    def __init__(self, map_file: str, initial_scen_file: Optional[str] = None, initial_agent_num: int = 0):
         self.map_file = map_file
         self.obstacles, self.nrows, self.ncols = self.parse_map(map_file)
         
@@ -213,8 +213,11 @@ class DynamicMAPFVisualizer:
         
         return None
     
-    def add_agent(self, start: Tuple[int, int], goal: Tuple[int, int]):
+    def add_agent(self, start: Optional[Tuple[int, int]], goal: Optional[Tuple[int, int]]):
         """Add a new agent and replan all paths"""
+        if start is None or goal is None:
+            print("Start or goal is None, cannot add agent.")
+            return False
         if start in self.obstacles or goal in self.obstacles:
             print("Cannot place agent on obstacle")
             return False
@@ -280,13 +283,21 @@ class DynamicMAPFVisualizer:
             return False
     
     def replan_all_paths(self):
-        """Replan paths for all agents"""
+        """Replan paths for all agents from their current positions at the current timestep"""
         if not self.agents:
             return
         
-        # Extract current starts and goals
-        starts = [agent[0] for agent in self.agents]
-        goals = [agent[1] for agent in self.agents]
+        # Use current position at current timestep for each agent as the new start
+        starts = []
+        goals = []
+        for start, goal, path, color, agent_id in self.agents:
+            if path and len(path) > 0:
+                # Use the agent's current position at the current frame
+                current_pos = path[min(self.frame, len(path) - 1)]
+                starts.append(current_pos)
+            else:
+                starts.append(start)
+            goals.append(goal)
         
         # Call pathfinder
         new_paths = self.call_pathfinder(starts, goals)
@@ -295,11 +306,11 @@ class DynamicMAPFVisualizer:
             # Update paths
             for i, (start, goal, old_path, color, agent_id) in enumerate(self.agents):
                 if i < len(new_paths) and new_paths[i]:
-                    self.agents[i] = (start, goal, new_paths[i], color, agent_id)
+                    self.agents[i] = (starts[i], goal, new_paths[i], color, agent_id)
             
             # Update makespan
             self.makespan = max(len(agent[2]) for agent in self.agents) if self.agents else 1
-            self.frame = min(self.frame, self.makespan - 1)
+            self.frame = 0  # Reset to 0 so all agents start from their new positions
             
             print(f"Replanned paths for {len(self.agents)} agents, makespan: {self.makespan}")
             
