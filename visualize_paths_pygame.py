@@ -3,6 +3,9 @@ import re
 import pygame
 import time
 import numpy as np
+import os
+import tempfile
+import shutil
 
 # Usage: python3 visualize_paths_pygame.py [path_file] [map_file]
 
@@ -97,6 +100,53 @@ def animate_paths_pygame(paths, starts, goals, nrows, ncols, obstacles):
     frame = 0
     speed = 1  # frames per second (1 timestep = 1 second)
     
+    # For interactive agent addition
+    selecting = False
+    select_stage = 0  # 0: not selecting, 1: select start, 2: select goal
+    new_start = None
+    new_goal = None
+    new_agent_color = (np.random.randint(50,255), np.random.randint(50,255), np.random.randint(50,255))
+
+    def grid_pos_from_mouse(pos):
+        mx, my = pos
+        c = (mx - margin) // cell_size
+        r = (my - margin) // cell_size
+        if 0 <= r < nrows and 0 <= c < ncols:
+            return (r, c)
+        return None
+
+    def write_scen_file(scen_path, starts, goals, map_file, nrows, ncols):
+        with open(scen_path, 'w') as f:
+            f.write('version 1\n')
+            for i, (s, g) in enumerate(zip(starts, goals)):
+                # Format: agent map cols rows start_col start_row goal_col goal_row cost
+                f.write(f"{i}\t{map_file}\t{ncols}\t{nrows}\t{s[1]}\t{s[0]}\t{g[1]}\t{g[0]}\t0\n")
+
+    def call_cpp_pathfinder(new_start, new_goal, all_paths, obstacles, nrows, ncols):
+        # Add the new agent to the starts/goals
+        all_starts = starts + [new_start]
+        all_goals = goals + [new_goal]
+        num_agents = len(all_starts)
+        # Use the map file from the main() args or default
+        map_file = sys.argv[2] if len(sys.argv) > 2 else 'random-32-32-20.map'
+        # Create a temp directory for files
+        with tempfile.TemporaryDirectory() as tmpdir:
+            scen_path = os.path.join(tmpdir, 'temp.scen')
+            out_path = os.path.join(tmpdir, 'temp_paths.txt')
+            write_scen_file(scen_path, all_starts, all_goals, map_file, nrows, ncols)
+            # Call the C++ executable
+            lns_exec = './lns'  # Change if your binary is named differently
+            cmd = [lns_exec, '--map', map_file, '--agents', scen_path, '--agentNum', str(num_agents), '--outputPaths', out_path, '--cutoffTime', '60']
+            try:
+                import subprocess
+                result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            except Exception as e:
+                print(f"Error running lns: {e}")
+                return None
+            # Parse the output paths
+            new_paths, new_starts, new_goals, _, _ = parse_paths(out_path)
+            return new_paths
+
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -110,6 +160,42 @@ def animate_paths_pygame(paths, starts, goals, nrows, ncols, obstacles):
                     frame = max(frame - 1, 0)
                 elif event.key == pygame.K_ESCAPE:
                     running = False
+                elif event.key == pygame.K_a:
+                    # Start selecting a new agent
+                    selecting = True
+                    select_stage = 1
+                    new_start = None
+                    new_goal = None
+            elif event.type == pygame.MOUSEBUTTONDOWN and selecting:
+                pos = pygame.mouse.get_pos()
+                grid_pos = grid_pos_from_mouse(pos)
+                if grid_pos and grid_pos not in obstacles:
+                    if select_stage == 1:
+                        new_start = grid_pos
+                        select_stage = 2
+                    elif select_stage == 2:
+                        new_goal = grid_pos
+                        # Add new agent
+                        # Call pathfinder with current paths as constraints
+                        new_paths = call_cpp_pathfinder(new_start, new_goal, paths, obstacles, nrows, ncols)
+                        if new_paths is not None:
+                            paths.clear()
+                            starts.clear()
+                            goals.clear()
+                            for p in new_paths:
+                                if p:
+                                    paths.append(p)
+                                    starts.append(p[0])
+                                    goals.append(p[-1])
+                            colors.clear()
+                            colors.extend(get_agent_colors(len(paths)))
+                            makespan = max(len(p) for p in paths)
+                            n_agents = len(paths)
+                        selecting = False
+                        select_stage = 0
+                        new_start = None
+                        new_goal = None
+                        new_agent_color = (np.random.randint(50,255), np.random.randint(50,255), np.random.randint(50,255))
         if not paused:
             frame = (frame + 1) % makespan
         screen.fill(bg_color)
@@ -158,8 +244,16 @@ def animate_paths_pygame(paths, starts, goals, nrows, ncols, obstacles):
         timestep_text = font.render(f'Timestep: {frame}', True, (0,0,0))
         screen.blit(timestep_text, (margin, 10))
         # Instructions
-        instr = small_font.render('SPACE: Pause/Play   ←/→: Step   ESC: Quit', True, (80,80,80))
+        instr = small_font.render('SPACE: Pause/Play   ←/→: Step   ESC: Quit   A: Add Agent', True, (80,80,80))
         screen.blit(instr, (margin, height - 30))
+        # Draw selection
+        if selecting:
+            if select_stage == 1 and new_start:
+                pygame.draw.rect(screen, (0,255,0), (margin + new_start[1]*cell_size, margin + new_start[0]*cell_size, cell_size, cell_size), 3)
+            if select_stage == 2 and new_start:
+                pygame.draw.rect(screen, (0,255,0), (margin + new_start[1]*cell_size, margin + new_start[0]*cell_size, cell_size, cell_size), 3)
+            if select_stage == 2 and new_goal:
+                pygame.draw.rect(screen, (255,0,0), (margin + new_goal[1]*cell_size, margin + new_goal[0]*cell_size, cell_size, cell_size), 3)
         pygame.display.flip()
         if not paused:
             clock.tick(speed)
