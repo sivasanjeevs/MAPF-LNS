@@ -119,64 +119,15 @@ class DynamicMAPFVisualizer:
         return starts, goals
     
     def get_agent_colors(self, n_agents):
-        """Generate distinct and vibrant colors for agents"""
-        # More vibrant and distinct colors
+        """Generate distinct colors for agents"""
         base_colors = [
-            (255, 0, 0),      # Bright Red
-            (0, 255, 0),      # Bright Green
-            (0, 0, 255),      # Bright Blue
-            (255, 255, 0),    # Yellow
-            (255, 0, 255),    # Magenta
-            (0, 255, 255),    # Cyan
-            (255, 165, 0),    # Orange
-            (128, 0, 128),    # Purple
-            (255, 20, 147),   # Deep Pink
-            (0, 128, 0),      # Dark Green
-            (255, 69, 0),     # Red Orange
-            (138, 43, 226),   # Blue Violet
-            (255, 215, 0),    # Gold
-            (0, 191, 255),    # Deep Sky Blue
-            (255, 105, 180),  # Hot Pink
-            (50, 205, 50),    # Lime Green
-            (255, 140, 0),    # Dark Orange
-            (147, 112, 219),  # Medium Purple
-            (255, 99, 71),    # Tomato
-            (32, 178, 170),   # Light Sea Green
-            (255, 0, 127),    # Rose
-            (0, 255, 127),    # Spring Green
-            (255, 127, 0),    # Orange Red
-            (138, 43, 226),   # Blue Violet
-            (255, 20, 147),   # Deep Pink
+            (31, 119, 180), (255, 127, 14), (44, 160, 44), (214, 39, 40),
+            (148, 103, 189), (140, 86, 75), (227, 119, 194), (127, 127, 127),
+            (188, 189, 34), (23, 190, 207), (255, 152, 150), (197, 176, 213)
         ]
-        
         colors = []
         for i in range(n_agents):
-            if i < len(base_colors):
-                colors.append(base_colors[i])
-            else:
-                # Generate additional colors if needed
-                hue = (i * 137.5) % 360  # Golden angle for good distribution
-                # Convert HSV to RGB (simplified)
-                h = hue / 60
-                c = 255
-                x = c * (1 - abs(h % 2 - 1))
-                m = 0
-                
-                if h < 1:
-                    r, g, b = c, x, 0
-                elif h < 2:
-                    r, g, b = x, c, 0
-                elif h < 3:
-                    r, g, b = 0, c, x
-                elif h < 4:
-                    r, g, b = 0, x, c
-                elif h < 5:
-                    r, g, b = x, 0, c
-                else:
-                    r, g, b = c, 0, x
-                
-                colors.append((int(r), int(g), int(b)))
-        
+            colors.append(base_colors[i % len(base_colors)])
         return colors
     
     def grid_pos_from_mouse(self, pos):
@@ -454,50 +405,10 @@ class DynamicMAPFVisualizer:
                 current_pos = path[min(self.frame, len(path) - 1)]
                 pos_pix = (self.margin + current_pos[1] * self.cell_size + self.cell_size // 2, 
                           self.margin + current_pos[0] * self.cell_size + self.cell_size // 2)
+                pygame.draw.circle(self.screen, color, pos_pix, max(8, self.cell_size // 2 - 2))
                 
-                # Draw agent with different shapes for better distinction
-                agent_size = max(8, self.cell_size // 2 - 2)
-                
-                # Use different shapes based on agent ID for better distinction
-                if agent_id % 4 == 0:
-                    # Circle
-                    pygame.draw.circle(self.screen, color, pos_pix, agent_size)
-                    pygame.draw.circle(self.screen, (0, 0, 0), pos_pix, agent_size, 2)
-                elif agent_id % 4 == 1:
-                    # Square
-                    rect = pygame.Rect(pos_pix[0] - agent_size, pos_pix[1] - agent_size, 
-                                     agent_size * 2, agent_size * 2)
-                    pygame.draw.rect(self.screen, color, rect)
-                    pygame.draw.rect(self.screen, (0, 0, 0), rect, 2)
-                elif agent_id % 4 == 2:
-                    # Triangle
-                    points = [
-                        (pos_pix[0], pos_pix[1] - agent_size),
-                        (pos_pix[0] - agent_size, pos_pix[1] + agent_size),
-                        (pos_pix[0] + agent_size, pos_pix[1] + agent_size)
-                    ]
-                    pygame.draw.polygon(self.screen, color, points)
-                    pygame.draw.polygon(self.screen, (0, 0, 0), points, 2)
-                else:
-                    # Diamond
-                    points = [
-                        (pos_pix[0], pos_pix[1] - agent_size),
-                        (pos_pix[0] + agent_size, pos_pix[1]),
-                        (pos_pix[0], pos_pix[1] + agent_size),
-                        (pos_pix[0] - agent_size, pos_pix[1])
-                    ]
-                    pygame.draw.polygon(self.screen, color, points)
-                    pygame.draw.polygon(self.screen, (0, 0, 0), points, 2)
-                
-                # Agent number with better contrast
-                # Use white text on dark background or black text on light background
-                brightness = sum(color) / 3
-                if brightness > 128:
-                    text_color = (0, 0, 0)  # Black text on light background
-                else:
-                    text_color = (255, 255, 255)  # White text on dark background
-                
-                text = self.font.render(str(agent_id), True, text_color)
+                # Agent number
+                text = self.font.render(str(agent_id), True, (255, 255, 255))
                 text_rect = text.get_rect(center=pos_pix)
                 self.screen.blit(text, text_rect)
     
@@ -513,38 +424,7 @@ class DynamicMAPFVisualizer:
         # Agent list
         for i, (start, goal, path, color, agent_id) in enumerate(self.agents):
             y_pos = legend_y + 35 + i * 30
-            legend_pos = (legend_x + 20, y_pos)
-            
-            # Draw the same shape as the agent
-            if agent_id % 4 == 0:
-                # Circle
-                pygame.draw.circle(self.screen, color, legend_pos, 12)
-                pygame.draw.circle(self.screen, (0, 0, 0), legend_pos, 12, 2)
-            elif agent_id % 4 == 1:
-                # Square
-                rect = pygame.Rect(legend_pos[0] - 12, legend_pos[1] - 12, 24, 24)
-                pygame.draw.rect(self.screen, color, rect)
-                pygame.draw.rect(self.screen, (0, 0, 0), rect, 2)
-            elif agent_id % 4 == 2:
-                # Triangle
-                points = [
-                    (legend_pos[0], legend_pos[1] - 12),
-                    (legend_pos[0] - 12, legend_pos[1] + 12),
-                    (legend_pos[0] + 12, legend_pos[1] + 12)
-                ]
-                pygame.draw.polygon(self.screen, color, points)
-                pygame.draw.polygon(self.screen, (0, 0, 0), points, 2)
-            else:
-                # Diamond
-                points = [
-                    (legend_pos[0], legend_pos[1] - 12),
-                    (legend_pos[0] + 12, legend_pos[1]),
-                    (legend_pos[0], legend_pos[1] + 12),
-                    (legend_pos[0] - 12, legend_pos[1])
-                ]
-                pygame.draw.polygon(self.screen, color, points)
-                pygame.draw.polygon(self.screen, (0, 0, 0), points, 2)
-            
+            pygame.draw.circle(self.screen, color, (legend_x + 20, y_pos), 12)
             agent_label = self.small_font.render(f'Agent {agent_id}', True, (0, 0, 0))
             self.screen.blit(agent_label, (legend_x + 40, y_pos - 10))
         
