@@ -102,5 +102,7 @@ private:
 
 	  // Class  SingleAgentSolver can access private members of Node 
 	  friend class SingleAgentSolver;
+	  // Class DynamicInstance can access private members
+	  friend class DynamicInstance;
 };
 

@@ -5,38 +5,38 @@
 #include <thread>
 #include <chrono>
 
-// Task structure for dynamic goal assignment
-struct Task {
+// Dynamic task structure for dynamic goal assignment
+struct DynamicTask {
     int agent_id;
     int goal_location;
     int priority;  // Higher number = higher priority
     double timestamp;  // When the task was assigned
     bool completed;
     
-    Task(int agent, int goal, int prio = 1) : 
+    DynamicTask(int agent, int goal, int prio = 1) : 
         agent_id(agent), goal_location(goal), priority(prio), 
         timestamp(std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count() / 1000.0),
         completed(false) {}
 };
 
-// Agent status for real-time tracking
-struct AgentStatus {
+// Dynamic agent status for real-time tracking
+struct DynamicAgentStatus {
     int current_location;
     int current_goal;
     bool has_task;
     double last_update_time;
     std::vector<int> path_to_goal;
     
-    AgentStatus() : current_location(-1), current_goal(-1), has_task(false), last_update_time(0.0) {}
+    DynamicAgentStatus() : current_location(-1), current_goal(-1), has_task(false), last_update_time(0.0) {}
 };
 
 class DynamicInstance : public Instance {
 private:
-    std::queue<Task> task_queue;
-    std::vector<AgentStatus> agent_statuses;
-    std::mutex task_mutex;
-    std::mutex status_mutex;
+    std::queue<DynamicTask> task_queue;
+    std::vector<DynamicAgentStatus> agent_statuses;
+    mutable std::mutex task_mutex;
+    mutable std::mutex status_mutex;
     bool simulation_running;
     std::thread simulation_thread;
     
@@ -69,7 +69,7 @@ public:
     
     // Task management
     bool hasPendingTasks() const;
-    Task getNextTask();
+    DynamicTask getNextTask();
     void completeTask(int agent_id);
     
     // Warehouse-specific methods

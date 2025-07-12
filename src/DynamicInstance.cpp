@@ -11,6 +11,36 @@ DynamicInstance::DynamicInstance(const string& map_fname, const string& agent_fn
     simulation_speed(1.0),
     last_simulation_time(0.0)
 {
+    // Comprehensive safety checks to prevent floating point exceptions
+    if (num_of_agents <= 0) {
+        std::cerr << "Error: Number of agents must be positive, got: " << num_of_agents << std::endl;
+        exit(1);
+    }
+    
+    if (num_of_rows <= 0 || num_of_cols <= 0) {
+        std::cerr << "Error: Map dimensions must be positive, got: " << num_of_rows << "x" << num_of_cols << std::endl;
+        exit(1);
+    }
+    
+    if (map_size <= 0) {
+        std::cerr << "Error: Map size must be positive, got: " << map_size << std::endl;
+        exit(1);
+    }
+    
+    // Check if map has any free locations
+    bool has_free_location = false;
+    for (int i = 0; i < map_size; i++) {
+        if (!isObstacle(i)) {
+            has_free_location = true;
+            break;
+        }
+    }
+    
+    if (!has_free_location) {
+        std::cerr << "Error: Map has no free locations for agents" << std::endl;
+        exit(1);
+    }
+    
     // Initialize agent statuses
     agent_statuses.resize(num_of_agents);
     for (int i = 0; i < num_of_agents; i++) {
@@ -37,7 +67,7 @@ void DynamicInstance::assignGoal(int agent_id, int goal_location, int priority) 
     }
     
     std::lock_guard<std::mutex> lock(task_mutex);
-    task_queue.push(Task(agent_id, goal_location, priority));
+    task_queue.push(DynamicTask(agent_id, goal_location, priority));
     
     std::lock_guard<std::mutex> status_lock(status_mutex);
     agent_statuses[agent_id].has_task = true;
@@ -56,8 +86,23 @@ void DynamicInstance::assignRandomGoal(int agent_id, int priority) {
     std::uniform_int_distribution<> dis(0, map_size - 1);
     
     int goal_location;
+    int attempts = 0;
+    const int max_attempts = 1000; // Prevent infinite loop
+    
     do {
         goal_location = dis(gen);
+        attempts++;
+        if (attempts > max_attempts) {
+            std::cerr << "Warning: Could not find free location after " << max_attempts << " attempts" << std::endl;
+            // Use first free location found
+            for (int i = 0; i < map_size; i++) {
+                if (!isObstacle(i)) {
+                    goal_location = i;
+                    break;
+                }
+            }
+            break;
+        }
     } while (isObstacle(goal_location));
     
     assignGoal(agent_id, goal_location, priority);
@@ -207,13 +252,13 @@ bool DynamicInstance::hasPendingTasks() const {
     return !task_queue.empty();
 }
 
-Task DynamicInstance::getNextTask() {
+DynamicTask DynamicInstance::getNextTask() {
     std::lock_guard<std::mutex> lock(task_mutex);
     if (task_queue.empty()) {
-        return Task(-1, -1); // Invalid task
+        return DynamicTask(-1, -1); // Invalid task
     }
     
-    Task task = task_queue.front();
+    DynamicTask task = task_queue.front();
     task_queue.pop();
     return task;
 }
@@ -244,13 +289,39 @@ std::pair<int, int> DynamicInstance::getWarehousePickupLocation() {
     // Pickup area: left side of warehouse
     std::random_device rd;
     std::mt19937 gen(rd());
+    
+    // Safety checks
+    if (num_of_rows <= 0 || num_of_cols <= 0) {
+        std::cerr << "Error: Invalid map dimensions for warehouse pickup" << std::endl;
+        return {0, 0};
+    }
+    
     std::uniform_int_distribution<> row_dis(0, num_of_rows - 1);
-    std::uniform_int_distribution<> col_dis(0, num_of_cols / 4); // Left quarter
+    
+    // Safety check to prevent division by zero
+    int pickup_cols = std::max(1, num_of_cols / 4); // At least 1 column
+    std::uniform_int_distribution<> col_dis(0, pickup_cols - 1);
     
     int row, col;
+    int attempts = 0;
+    const int max_attempts = 100;
+    
     do {
         row = row_dis(gen);
         col = col_dis(gen);
+        attempts++;
+        if (attempts > max_attempts) {
+            // Fallback: find first free location
+            for (int r = 0; r < num_of_rows; r++) {
+                for (int c = 0; c < pickup_cols; c++) {
+                    if (!isObstacle(linearizeCoordinate(r, c))) {
+                        return {r, c};
+                    }
+                }
+            }
+            // Last resort
+            return {0, 0};
+        }
     } while (isObstacle(linearizeCoordinate(row, col)));
     
     return {row, col};
@@ -260,13 +331,40 @@ std::pair<int, int> DynamicInstance::getWarehouseDropoffLocation() {
     // Dropoff area: right side of warehouse
     std::random_device rd;
     std::mt19937 gen(rd());
+    
+    // Safety checks
+    if (num_of_rows <= 0 || num_of_cols <= 0) {
+        std::cerr << "Error: Invalid map dimensions for warehouse dropoff" << std::endl;
+        return {0, 0};
+    }
+    
     std::uniform_int_distribution<> row_dis(0, num_of_rows - 1);
-    std::uniform_int_distribution<> col_dis(3 * num_of_cols / 4, num_of_cols - 1); // Right quarter
+    
+    // Safety check to prevent division by zero
+    int dropoff_start = std::max(0, 3 * num_of_cols / 4);
+    int dropoff_end = std::max(dropoff_start + 1, num_of_cols - 1);
+    std::uniform_int_distribution<> col_dis(dropoff_start, dropoff_end);
     
     int row, col;
+    int attempts = 0;
+    const int max_attempts = 100;
+    
     do {
         row = row_dis(gen);
         col = col_dis(gen);
+        attempts++;
+        if (attempts > max_attempts) {
+            // Fallback: find first free location
+            for (int r = 0; r < num_of_rows; r++) {
+                for (int c = dropoff_start; c <= dropoff_end; c++) {
+                    if (!isObstacle(linearizeCoordinate(r, c))) {
+                        return {r, c};
+                    }
+                }
+            }
+            // Last resort
+            return {0, 0};
+        }
     } while (isObstacle(linearizeCoordinate(row, col)));
     
     return {row, col};

@@ -13,8 +13,8 @@ if ! pkg-config --exists boost; then
     echo "Warning: Boost not found via pkg-config"
 fi
 
-# Compile the dynamic components
-g++ -std=c++17 -I./inc -O3 -DNDEBUG \
+# Compile the dynamic components with correct include paths
+g++ -std=c++17 -I./inc -I./inc/CBS -I./inc/PIBT -O3 -DNDEBUG \
     -o dynamic_lns \
     src/dynamic_driver.cpp \
     src/DynamicInstance.cpp \
