@@ -213,7 +213,7 @@ class WarehouseAnalyzer:
 
 def main():
     parser = argparse.ArgumentParser(description="Warehouse Scenario Analyzer")
-    parser.add_argument("--map", default="instances/warehouse-20-40-10-2-2.map", help="Map file")
+    parser.add_argument("--map", default="instances/warehouse.map", help="Map file")
     parser.add_argument("--scenario", default="instances/warehouse-20-40-10-2-2-10000agents-1.scen", help="Scenario file")
     parser.add_argument("--agents", type=int, default=100, help="Number of agents to analyze")
     parser.add_argument("--visualize", action="store_true", help="Generate visualization")

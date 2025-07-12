@@ -26,7 +26,7 @@ if [ ! -f "instances/warehouse-20-40-10-2-2-10000agents-1.scen" ]; then
 fi
 
 # Build the dynamic executable if it doesn't exist
-if [ ! -f "dynamic_driver" ]; then
+if [ ! -f "dynamic_lns" ]; then
     echo "Building dynamic driver..."
     ./build_dynamic.sh
     if [ $? -ne 0 ]; then
@@ -37,15 +37,15 @@ fi
 
 # Run the dynamic simulation
 echo "Starting dynamic simulation..."
-./dynamic_driver \
-    --map instances/warehouse-20-40-10-2-2.map \
-    --scenario instances/warehouse-20-40-10-2-2-10000agents-1.scen \
-    --agents $NUM_AGENTS \
-    --time $SIM_TIME \
-    --output warehouse_dynamic_paths.txt \
-    --visualize
+./dynamic_lns \
+    -m random-32-32-20.map \
+    -a random-32-32-20-random-1.scen \
+    -k $NUM_AGENTS \
+    -t $SIM_TIME \
+    -o warehouse_dynamic_paths.txt \
+    -v 1
 
 echo ""
 echo "Simulation completed!"
 echo "Results saved to: warehouse_dynamic_paths.txt"
-echo "Visualization saved to: warehouse_dynamic_visualization.html" 
+echo "Visualization saved to: warehouse_dynamic_visualization.html"

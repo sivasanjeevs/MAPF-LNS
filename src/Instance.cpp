@@ -10,6 +10,7 @@ Instance::Instance(const string& map_fname, const string& agent_fname,
 	int num_of_agents, int num_of_rows, int num_of_cols, int num_of_obstacles, int warehouse_width):
 	map_fname(map_fname), agent_fname(agent_fname), num_of_agents(num_of_agents)
 {
+	std::cout << "DEBUG: Entered Instance constructor" << std::endl;
 	bool succ = loadMap();
 	if (!succ)
 	{
@@ -252,9 +253,14 @@ bool Instance::loadMap()
 	using namespace boost;
 	using namespace std;
 	ifstream myfile(map_fname.c_str());
-	if (!myfile.is_open())
+	if (!myfile.is_open()){
+		cerr << "Failed to open map file: " << map_fname << endl;
 		return false;
+	}
+		
 	string line;
+	getline(myfile, line);
+	cout << "First line of map file: [" << line << "]" << endl;
 	tokenizer< char_separator<char> >::iterator beg;
 	getline(myfile, line);
 	if (line[0] == 't') // Nathan's benchmark

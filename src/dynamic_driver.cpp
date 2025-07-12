@@ -13,6 +13,7 @@ using namespace std;
 
 int main(int argc, char** argv)
 {
+    std::cout << "DEBUG: Entered main()" << std::endl;
     namespace po = boost::program_options;
     
     // Declare the supported options.
@@ -57,6 +58,7 @@ int main(int argc, char** argv)
     // Initialize dynamic instance
     cout << "Initializing Dynamic MAPF Simulation..." << endl;
     DynamicInstance dynamic_instance(
+        std::cout << "DEBUG: Entered DynamicInstance constructor" << std::endl;
         vm["map"].as<string>(),
         vm["agents"].as<string>(),
         vm["agentNum"].as<int>()
