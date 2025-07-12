@@ -3,6 +3,7 @@
 #include "LNS.h"
 #include "AnytimeBCBS.h"
 #include "AnytimeEECBS.h"
+#include "Instance.h"
 #include "PIBT/pibt.h"
 
 
