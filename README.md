@@ -2,6 +2,23 @@
 
 This project is now restricted to only support the LNS(PP;PP) case for Multi-Agent Path Finding (MAPF).
 
+## Usage
+
+### Running the Solver
+
+To find paths for agents, run:
+
+for map1
+```
+./lns --map random-32-32-20.map --agents random-32-32-20-random-1.scen --agentNum 10 --outputPaths paths.txt
+```
+for map2 (large map)
+```
+./lns --map warehouse-20-40-10-2-2.map --agents instances/warehouse-20-40-10-2-2-10000agents-1.scen --agentNum 100 --outputPaths paths.txt
+```
+
+---
+
 # Dynamic Multi-Agent Pathfinding (MAPF) System
 
 This project has been extended to support dynamic agent addition in real-time. You can now add new agents while existing agents are moving, and the system will automatically replan paths to avoid collisions.
