@@ -1,6 +1,63 @@
 # MAPF-LNS2 (LNS(PP;PP))
 
+## Build and Run Instructions
+
+### 1. Install Dependencies
+
+On Ubuntu:
+```bash
+sudo apt-get install cmake libboost-all-dev libeigen3-dev
+```
+For visualization:
+```bash
+pip install pygame
+```
+
+### 2. Build the C++ Backend
+
+```bash
+cd MAPF-LNS2-init-LNS
+mkdir -p build
+cd build
+cmake ..
+make -j4
+cd ..
+cp build/lns ./lns
+```
+- This will create the `lns` executable in your project directory.
+
+### 3. Run the System
+
+After building, you can start the dynamic visualizer:
+```bash
+./run_dynamic.sh
+```
+- This script **does not build** the C++ code. It only runs the visualizer if `lns` already exists.
+- If you want to start with initial agents:
+```bash
+./run_dynamic.sh --with-initial
+```
+
+---
+
 This project is now restricted to only support the LNS(PP;PP) case for Multi-Agent Path Finding (MAPF).
+
+## Usage
+
+### Running the Solver
+
+To find paths for agents, run:
+
+for map1
+```
+./lns --map random-32-32-20.map --agents random-32-32-20-random-1.scen --agentNum 10 --outputPaths paths.txt
+```
+for map2 (large map)
+```
+./lns --map warehouse-20-40-10-2-2.map --agents instances/warehouse-20-40-10-2-2-10000agents-1.scen --agentNum 100 --outputPaths paths.txt
+```
+
+---
 
 # Dynamic Multi-Agent Pathfinding (MAPF) System
 

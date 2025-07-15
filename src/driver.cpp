@@ -28,6 +28,7 @@ int main(int argc, char** argv)
         ("neighborSize", po::value<int>()->default_value(8), "Size of the neighborhood")
         ("maxIterations", po::value<int>()->default_value(0), "maximum number of iterations")
         ("initDestoryStrategy", po::value<string>()->default_value("Adaptive"), "initial destroy strategy (Adaptive)")
+        ("seed", po::value<int>()->default_value(0), "random seed")
 		;
 	po::variables_map vm;
 	po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -45,7 +46,7 @@ int main(int argc, char** argv)
 		vm["agentNum"].as<int>());
     double time_limit = vm["cutoffTime"].as<double>();
     int screen = vm["screen"].as<int>();
-	srand(vm["seed"].as<int>());
+	//srand(vm["seed"].as<int>());
 
     // Only allow LNS
     string solver = "LNS";
