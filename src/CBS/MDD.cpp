@@ -57,7 +57,7 @@ bool MDD::buildMDD(ConstraintTable& constraint_table, const SingleAgentSolver* _
 		Node(int location, int timestep, int h_val) : location(location), timestep(timestep), h_val(h_val) {}
 	};
 	this->solver = _solver;
-	int holding_time = constraint_table.getHoldingTime(solver->goal_location, constraint_table.length_min); // the earliest timestep that the agent can hold its goal location. The length_min is considered here.
+	int holding_time = constraint_table.getHoldingTime(solver->goal_location, 0, constraint_table.length_min); // TODO: use correct orientation if available
 	auto root = new Node(solver->start_location, 0, solver->my_heuristic[solver->start_location]); // Root
 	// generate a heap that can save nodes (and a open_handle)
 	pairing_heap< Node*, compare<Node::compare_node> > open;
@@ -87,8 +87,8 @@ bool MDD::buildMDD(ConstraintTable& constraint_table, const SingleAgentSolver* _
 		for (int next_location : next_locations) // Try every possible move. We only add backward edges in this step.
 		{
 			int next_timestep = curr->timestep + 1;
-			if (constraint_table.constrained(next_location, next_timestep) ||
-				constraint_table.constrained(curr->location, next_location, next_timestep))
+			if (constraint_table.constrained(next_location, 0, next_timestep) ||
+				constraint_table.constrained(curr->location, 0, next_location, 0, next_timestep))
 				continue;
 			int next_h_val = solver->my_heuristic[next_location];
 			if (next_timestep + next_h_val > upperbound)
@@ -178,8 +178,8 @@ bool MDD::buildMDD(const ConstraintTable& ct,
 		for (int next_location : next_locations) // Try every possible move. We only add backward edges in this step.
 		{
 			if (solver->my_heuristic[next_location] <= heuristicBound &&
-				!ct.constrained(next_location, curr->level + 1) &&
-				!ct.constrained(curr->location, next_location, curr->level + 1)) // valid move
+				!ct.constrained(next_location, 0, curr->level + 1) &&
+				!ct.constrained(curr->location, 0, next_location, 0, curr->level + 1)) // valid move
 			{
 				auto child = closed.rbegin();
 				bool find = false;
@@ -407,8 +407,8 @@ void MDD::increaseBy(const ConstraintTable&ct, int dLevel, SingleAgentSolver* so
         {
           // int newLoc = node_ptr->location + solver.moves_offset[i];
           if (solver->my_heuristic[newLoc] <= heuristicBound &&
-              !ct.constrained(newLoc, it->level + 1) &&
-              !ct.constrained(it->location, newLoc, it->level + 1)) // valid move
+              !ct.constrained(newLoc, 0, it->level + 1) &&
+              !ct.constrained(it->location, 0, newLoc, 0, it->level + 1)) // valid move
             {
               if (node_map.find(newLoc) == node_map.end()){
                 auto newNode = new MDDNode(newLoc, node_ptr);

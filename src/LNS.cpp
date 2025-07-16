@@ -103,8 +103,12 @@ bool LNS::run()
     while (runtime < time_limit && iteration_stats.size() <= num_of_iterations)
     {
         runtime =((fsec)(Time::now() - start_time)).count();
-        if(screen >= 1)
-            validateSolution();
+        if(screen >= 1) {
+            if (!validateSolution()) {
+                cerr << "Solution validation failed. Skipping this replan." << endl;
+                break;
+            }
+        }
         if (ALNS)
             chooseDestroyHeuristicbyALNS();
 
@@ -506,8 +510,8 @@ void LNS::updatePIBTResult(const PIBT_Agents& A, vector<int>& shuffled_agents){
             std::cout<<A[i]->logStr()<<std::endl;
         for (int n_index = 0; n_index < A[i]->getHist().size(); n_index++){
             auto n = A[i]->getHist()[n_index];
-            agents[a_id].path[n_index] = PathEntry(n->v->getId());
-
+            agents[a_id].path[n_index] = PathEntry(n->v->getId(), 0);
+            
             //record the last time agent reach the goal from a non-goal vertex.
             if(agents[a_id].path_planner->goal_location == n->v->getId()
                 && n_index - 1>=0
@@ -701,7 +705,7 @@ void LNS::randomWalk(int agent_id, int start_location, int start_timestep,
             int next_h_val = agents[agent_id].path_planner->my_heuristic[*it];
             if (t + 1 + next_h_val < upperbound) // move to this location
             {
-                path_table.getConflictingAgents(agent_id, conflicting_agents, loc, *it, t + 1);
+                path_table.getConflictingAgents(agent_id, conflicting_agents, loc, 0, *it, 0, t + 1);
                 loc = *it;
                 break;
             }
@@ -712,7 +716,7 @@ void LNS::randomWalk(int agent_id, int start_location, int start_timestep,
     }
 }
 
-void LNS::validateSolution() const
+bool LNS::validateSolution() const
 {
     int sum = 0;
     for (const auto& a1_ : agents)
@@ -720,19 +724,19 @@ void LNS::validateSolution() const
         if (a1_.path.empty())
         {
             cerr << "No solution for agent " << a1_.id << endl;
-            exit(-1);
+            return false;
         }
         else if (a1_.path_planner->start_location != a1_.path.front().location)
         {
             cerr << "The path of agent " << a1_.id << " starts from location " << a1_.path.front().location
                 << ", which is different from its start location " << a1_.path_planner->start_location << endl;
-            exit(-1);
+            return false;
         }
         else if (a1_.path_planner->goal_location != a1_.path.back().location)
         {
             cerr << "The path of agent " << a1_.id << " ends at location " << a1_.path.back().location
                  << ", which is different from its goal location " << a1_.path_planner->goal_location << endl;
-            exit(-1);
+            return false;
         }
         for (int t = 1; t < (int) a1_.path.size(); t++ )
         {
@@ -741,7 +745,7 @@ void LNS::validateSolution() const
                 cerr << "The path of agent " << a1_.id << " jump from "
                      << a1_.path[t - 1].location << " to " << a1_.path[t].location
                      << " between timesteps " << t - 1 << " and " << t << endl;
-                exit(-1);
+                return false;
             }
         }
         sum += (int) a1_.path.size() - 1;
@@ -758,7 +762,7 @@ void LNS::validateSolution() const
                 {
                     cerr << "Find a vertex conflict between agents " << a1.id << " and " << a2.id <<
                             " at location " << a1.path[t].location << " at timestep " << t << endl;
-                    exit(-1);
+                    return false;
                 }
                 else if (a1.path[t].location == a2.path[t - 1].location &&
                         a1.path[t - 1].location == a2.path[t].location) // edge conflict
@@ -766,7 +770,7 @@ void LNS::validateSolution() const
                     cerr << "Find an edge conflict between agents " << a1.id << " and " << a2.id <<
                          " at edge (" << a1.path[t - 1].location << "," << a1.path[t].location <<
                          ") at timestep " << t << endl;
-                    exit(-1);
+                    return false;
                 }
             }
             int target = a1.path.back().location;
@@ -777,7 +781,7 @@ void LNS::validateSolution() const
                     cerr << "Find a target conflict where agent " << a2.id << " (of length " << a2.path.size() - 1<<
                          ") traverses agent " << a1.id << " (of length " << a1.path.size() - 1<<
                          ")'s target location " << target << " at timestep " << t << endl;
-                    exit(-1);
+                    return false;
                 }
             }
         }
@@ -786,8 +790,9 @@ void LNS::validateSolution() const
     {
         cerr << "The computed sum of costs " << sum_of_costs <<
              " is different from the sum of the paths in the solution " << sum << endl;
-        exit(-1);
+        return false;
     }
+    return true;
 }
 
 void LNS::writeIterStatsToFile(const string & file_name) const

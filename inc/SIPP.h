@@ -15,9 +15,9 @@ public:
     int high_expansion; // the upper bound with respect to expansion
 	bool collision_v;
     SIPPNode() : LLNode() {}
-	SIPPNode(int loc, int g_val, int h_val, SIPPNode* parent, int timestep, int high_generation, int high_expansion,
+	SIPPNode(int loc, int orientation, int g_val, int h_val, SIPPNode* parent, int timestep, int high_generation, int high_expansion,
 	        bool collision_v, int num_of_conflicts) :
-            LLNode(loc, g_val, h_val, parent, timestep, num_of_conflicts), high_generation(high_generation),
+            LLNode(loc, orientation, g_val, h_val, parent, timestep, num_of_conflicts), high_generation(high_generation),
             high_expansion(high_expansion), collision_v(collision_v) {}
 	// SIPPNode(const SIPPNode& other): LLNode(other), high_generation(other.high_generation), high_expansion(other.high_expansion),
         //                              collision_v(other.collision_v) {}
@@ -37,6 +37,7 @@ public:
 		{
             size_t seed = 0;
             boost::hash_combine(seed, n->location);
+            boost::hash_combine(seed, n->orientation);
             boost::hash_combine(seed, n->high_generation);
             return seed;
 		}
@@ -51,6 +52,7 @@ public:
 		{
 			return (n1 == n2) ||
 			            (n1 && n2 && n1->location == n2->location &&
+                        n1->orientation == n2->orientation &&
 				        n1->wait_at_goal == n2->wait_at_goal &&
 				        n1->is_goal == n2->is_goal &&
                          n1->high_generation == n2->high_generation);

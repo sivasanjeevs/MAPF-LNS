@@ -17,7 +17,7 @@ int PPS::s_uuid = 0;
 PPS::PPS(Problem* _P) : Solver(_P) {
   init();
 }
-PPS::PPS(Problem* _P, std::mt19937* _MT) : Solver(_P, _MT) {
+PPS::PPS(Problem* _P, std::mt19937* _MT) : Solver(_P) {
   init();
 }
 

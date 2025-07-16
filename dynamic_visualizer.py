@@ -142,11 +142,15 @@ class DynamicMAPFVisualizer:
         goals = []
         with open(scen_file, 'r') as f:
             lines = f.readlines()
-            for line in lines[1:agent_num+1]:  # Skip version line
+            for idx, line in enumerate(lines[1:agent_num+1]):  # Skip version line
                 parts = line.strip().split('\t')
                 if len(parts) >= 8:
                     start_col, start_row = int(parts[4]), int(parts[5])
                     goal_col, goal_row = int(parts[6]), int(parts[7])
+                    # Validation: check if within map bounds
+                    if not (0 <= start_row < self.nrows and 0 <= start_col < self.ncols and 0 <= goal_row < self.nrows and 0 <= goal_col < self.ncols):
+                        print(f"Warning: Agent {idx} start or goal out of bounds and will be skipped. Start=({start_row},{start_col}), Goal=({goal_row},{goal_col}), Map=({self.nrows},{self.ncols})")
+                        continue
                     starts.append((start_row, start_col))
                     goals.append((goal_row, goal_col))
         return starts, goals
@@ -454,14 +458,31 @@ class DynamicMAPFVisualizer:
                 trail = path[:min(self.frame + 1, len(path))]
                 if len(trail) >= 2:
                     points = [(self.margin + c * self.cell_size + self.cell_size // 2,
-                              self.margin + r * self.cell_size + self.cell_size // 2) for r, c in trail]
+                              self.margin + r * self.cell_size + self.cell_size // 2) for r, c, *_ in trail]
                     pygame.draw.lines(self.screen, color, False, points, max(2, self.cell_size // 15))
-            # Draw current position
+            # Draw current position and orientation
             if path:
-                current_pos = path[min(self.frame, len(path) - 1)]
-                pos_pix = (self.margin + current_pos[1] * self.cell_size + self.cell_size // 2,
-                          self.margin + current_pos[0] * self.cell_size + self.cell_size // 2)
+                entry = path[min(self.frame, len(path) - 1)]
+                if len(entry) == 3:
+                    r, c, orientation = entry
+                else:
+                    r, c = entry
+                    orientation = 0  # fallback if orientation missing
+                pos_pix = (self.margin + c * self.cell_size + self.cell_size // 2,
+                          self.margin + r * self.cell_size + self.cell_size // 2)
                 pygame.draw.circle(self.screen, color, pos_pix, max(8, self.cell_size // 2 - 2))
+                # Draw orientation arrow/triangle
+                arrow_len = self.cell_size // 2 - 4
+                angle_map = {0: -90, 1: 0, 2: 90, 3: 180}  # N, E, S, W
+                angle = angle_map.get(orientation, 0)
+                # Triangle points
+                tip = (pos_pix[0] + arrow_len * np.cos(np.radians(angle)),
+                       pos_pix[1] + arrow_len * np.sin(np.radians(angle)))
+                left = (pos_pix[0] + (arrow_len // 2) * np.cos(np.radians(angle + 120)),
+                        pos_pix[1] + (arrow_len // 2) * np.sin(np.radians(angle + 120)))
+                right = (pos_pix[0] + (arrow_len // 2) * np.cos(np.radians(angle - 120)),
+                         pos_pix[1] + (arrow_len // 2) * np.sin(np.radians(angle - 120)))
+                pygame.draw.polygon(self.screen, (0, 0, 0), [tip, left, right])
                 # Agent number
                 text = self.font.render(str(agent_id), True, (255, 255, 255))
                 text_rect = text.get_rect(center=pos_pix)

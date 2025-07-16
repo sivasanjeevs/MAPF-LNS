@@ -3,24 +3,15 @@
 void SIPP::updatePath(const LLNode* goal, vector<PathEntry> &path)
 {
     num_collisions = goal->num_of_conflicts;
-	path.resize(goal->timestep + 1);
-	// num_of_conflicts = goal->num_of_conflicts;
-
-	const auto* curr = goal;
-	while (curr->parent != nullptr) // non-root node
-	{
-		const auto* prev = curr->parent;
-		int t = prev->timestep + 1;
-		while (t < curr->timestep)
-		{
-			path[t].location = prev->location; // wait at prev location
-			t++;
-		}
-		path[curr->timestep].location = curr->location; // move to curr location
-		curr = prev;
-	}
-	assert(curr->timestep == 0);
-	path[0].location = curr->location;
+    const LLNode* curr = goal;
+    std::vector<PathEntry> tmp_path;
+    while (curr != nullptr)
+    {
+        tmp_path.emplace_back(curr->location, curr->orientation);
+        curr = curr->parent;
+    }
+    std::reverse(tmp_path.begin(), tmp_path.end());
+    path = std::move(tmp_path);
 }
 
 
@@ -37,12 +28,11 @@ Path SIPP::findPath(const ConstraintTable& constraint_table)
     Interval interval = reservation_table.get_first_safe_interval(start_location);
     if (get<0>(interval) > 0)
         return path;
-    auto holding_time = constraint_table.getHoldingTime(goal_location, constraint_table.length_min);
-    auto last_target_collision_time = constraint_table.getLastCollisionTimestep(goal_location);
+    auto holding_time = constraint_table.getHoldingTime(goal_location, 0, constraint_table.length_min); // TODO: use correct orientation if available
+    auto last_target_collision_time = constraint_table.getLastCollisionTimestep(goal_location, 0); // TODO: use correct orientation if available
     // generate start and add it to the OPEN & FOCAL list
     auto h = max(max(my_heuristic[start_location], holding_time), last_target_collision_time + 1);
-    auto start = new SIPPNode(start_location, 0, h, nullptr, 0, get<1>(interval), get<1>(interval),
-                                get<2>(interval), get<2>(interval));
+    auto start = new SIPPNode(start_location, 0, h, 0, nullptr, 0, get<1>(interval), get<1>(interval), get<2>(interval), get<2>(interval));
     pushNodeToFocal(start);
 
     while (!focal_list.empty())
@@ -62,7 +52,7 @@ Path SIPP::findPath(const ConstraintTable& constraint_table)
                  !curr->wait_at_goal && // not wait at the goal location
                  curr->timestep >= holding_time) // the agent can hold the goal location afterward
         {
-            int future_collisions = constraint_table.getFutureNumOfCollisions(curr->location, curr->timestep);
+            int future_collisions = constraint_table.getFutureNumOfCollisions(curr->location, curr->orientation, curr->timestep);
             if (future_collisions == 0)
             {
                 updatePath(curr, path);
@@ -80,7 +70,8 @@ Path SIPP::findPath(const ConstraintTable& constraint_table)
                 delete goal;
         }
 
-        for (int next_location : instance.getNeighbors(curr->location)) // move to neighboring locations
+        auto next_states = instance.getNextStates(curr->location, curr->orientation);
+        for (const auto& [next_location, next_orientation] : next_states)
         {
             for (auto & i : reservation_table.get_safe_intervals(
                     curr->location, next_location, curr->timestep + 1, curr->high_expansion + 1))
@@ -91,12 +82,11 @@ Path SIPP::findPath(const ConstraintTable& constraint_table)
                 if (next_timestep + my_heuristic[next_location] > constraint_table.length_max)
                     break;
                 auto next_collisions = curr->num_of_conflicts +
-                                    // (int)curr->collision_v * max(next_timestep - curr->timestep - 1, 0) + // wait time
                                       (int)next_v_collision + (int)next_e_collision;
                 auto next_h_val = max(my_heuristic[next_location], (next_collisions > 0?
                     holding_time : curr->getFVal()) - next_timestep); // path max
                 // generate (maybe temporary) node
-                auto next = new SIPPNode(next_location, next_timestep, next_h_val, curr, next_timestep,
+                auto next = new SIPPNode(next_location, next_orientation, next_timestep, next_h_val, curr, next_timestep,
                                          next_high_generation, next_high_expansion, next_v_collision, next_collisions);
                 // try to retrieve it from the hash table
                 if (dominanceCheck(next))
@@ -115,7 +105,7 @@ Path SIPP::findPath(const ConstraintTable& constraint_table)
             auto next_collisions = curr->num_of_conflicts +
                     // (int)curr->collision_v * max(next_timestep - curr->timestep - 1, 0) +
 		    (int)get<2>(interval);
-            auto next = new SIPPNode(curr->location, next_timestep, next_h_val, curr, next_timestep,
+            auto next = new SIPPNode(curr->location, curr->orientation, next_timestep, next_h_val, curr, next_timestep,
                                      get<1>(interval), get<1>(interval), get<2>(interval),
                                      next_collisions);
             next->wait_at_goal = (curr->location == goal_location);
@@ -153,7 +143,7 @@ pair<Path, int> SIPP::findSuboptimalPath(const HLNode& node, const ConstraintTab
     ConstraintTable constraint_table(initial_constraints);
     constraint_table.insert2CT(node, agent);
 	runtime_build_CT = (double)(clock() - t) / CLOCKS_PER_SEC;
-	int holding_time = constraint_table.getHoldingTime(goal_location, constraint_table.length_min);
+	int holding_time = constraint_table.getHoldingTime(goal_location, 0, constraint_table.length_min);
 	t = clock();
     constraint_table.insert2CAT(agent, paths);
 	runtime_build_CAT = (double)(clock() - t) / CLOCKS_PER_SEC;
@@ -169,7 +159,7 @@ pair<Path, int> SIPP::findSuboptimalPath(const HLNode& node, const ConstraintTab
 		return {path, 0};
 
 	 // generate start and add it to the OPEN list
-	auto start = new SIPPNode(start_location, 0, max(my_heuristic[start_location], holding_time), nullptr, 0,
+	auto start = new SIPPNode(start_location, 0, max(my_heuristic[start_location], holding_time), 0, nullptr, 0,
         get<1>(interval), get<1>(interval), get<2>(interval), get<2>(interval));
     min_f_val = max(holding_time, max((int)start->getFVal(), lowerbound));
     pushNodeToOpenAndFocal(start);
@@ -191,7 +181,8 @@ pair<Path, int> SIPP::findSuboptimalPath(const HLNode& node, const ConstraintTab
             break;
         }
 
-        for (int next_location : instance.getNeighbors(curr->location)) // move to neighboring locations
+        auto next_states = instance.getNextStates(curr->location, curr->orientation);
+		for (const auto& [next_location, next_orientation] : next_states)
 		{
 			for (auto & i : reservation_table.get_safe_intervals(
 				curr->location, next_location, curr->timestep + 1, curr->high_expansion + 1))
@@ -207,7 +198,7 @@ pair<Path, int> SIPP::findSuboptimalPath(const HLNode& node, const ConstraintTab
                 int next_conflicts = curr->num_of_conflicts +
                         //(int)curr->collision_v * max(next_timestep - curr->timestep - 1, 0) +
                         (int)next_v_collision + (int)next_e_collision;
-                auto next = new SIPPNode(next_location, next_g_val, next_h_val, curr, next_timestep,
+                auto next = new SIPPNode(next_location, next_orientation, next_g_val, next_h_val, curr, next_timestep,
                         next_high_generation, next_high_expansion, next_v_collision, next_conflicts);
                 if (dominanceCheck(next))
                     pushNodeToOpenAndFocal(next);
@@ -226,7 +217,7 @@ pair<Path, int> SIPP::findSuboptimalPath(const HLNode& node, const ConstraintTab
             auto next_collisions = curr->num_of_conflicts +
                                    //(int)curr->collision_v * max(next_timestep - curr->timestep - 1, 0) + // wait time
                                    (int)get<2>(interval);
-            auto next = new SIPPNode(curr->location, next_timestep, next_h_val, curr, next_timestep,
+            auto next = new SIPPNode(curr->location, curr->orientation, next_timestep, next_h_val, curr, next_timestep,
                                      get<1>(interval), get<1>(interval), get<2>(interval), next_collisions);
             if (curr->location == goal_location)
                 next->wait_at_goal = true;
@@ -267,7 +258,7 @@ pair<Path, int> SIPP::findSuboptimalPath(const HLNode& node, const ConstraintTab
         if (curr->location == goal_location && // arrive at the goal location
             !curr->wait_at_goal && // not wait at the goal location
             curr->timestep >= holding_time && // the agent can hold the goal location afterward
-            constraint_table.getFutureNumOfCollisions(curr->location, curr->timestep) == 0) // no future collisions
+            constraint_table.getFutureNumOfCollisions(curr->location, curr->orientation, curr->timestep) == 0) // no future collisions
         {
             updatePath(curr, path);
             break;
@@ -304,7 +295,7 @@ int SIPP::getTravelTime(int start, int end, const ConstraintTable& constraint_ta
     reset();
     min_f_val = -1; // this disables focal list
     int length = MAX_TIMESTEP;
-    auto root = new SIPPNode(start, 0, compute_heuristic(start, end), nullptr, 0, 1, 1, 0, 0);
+    auto root = new SIPPNode(start, 0, compute_heuristic(start, end), 0, nullptr, 0, 1, 1, 0, 0);
     pushNodeToOpenAndFocal(root);
     auto static_timestep = constraint_table.getMaxTimestep(); // everything is static after this timestep
     while (!open_list.empty())
@@ -329,14 +320,13 @@ int SIPP::getTravelTime(int start, int end, const ConstraintTable& constraint_ta
                 }
                 next_timestep--;
             }
-            if (!constraint_table.constrained(next_location, next_timestep) &&
-                !constraint_table.constrained(curr->location, next_location, next_timestep))
+            if (!constraint_table.constrained(next_location, 0, next_timestep) &&
+                !constraint_table.constrained(curr->location, 0, next_location, 0, next_timestep))
             {  // if that grid is not blocked
                 int next_h_val = compute_heuristic(next_location, end);
                 if (next_g_val + next_h_val >= upper_bound) // the cost of the path is larger than the upper bound
                     continue;
-                auto next = new SIPPNode(next_location, next_g_val, next_h_val, nullptr, next_timestep,
-                                         next_timestep + 1, next_timestep + 1, 0, 0);
+                auto next = new SIPPNode(next_location, curr->orientation, next_timestep + 1, 0, nullptr, next_timestep + 1, next_timestep + 1, 0, 0, 0);
                 if (dominanceCheck(next))
                     pushNodeToOpenAndFocal(next);
                 else

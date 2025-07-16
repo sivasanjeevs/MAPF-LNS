@@ -17,10 +17,16 @@ public:
 		int num_of_agents = 0, int num_of_rows = 0, int num_of_cols = 0, int num_of_obstacles = 0, int warehouse_width = 0);
 
 
-	void printAgents() const;
+	    void printAgents() const;
 	string getMapFile() const {return map_fname;};
     vector<int> getStarts() const {return start_locations;};
     vector<int> getGoals() const {return goal_locations;};
+    
+    // Dynamic assignment methods
+    bool updateAgentGoal(int agent_id, int new_start, int new_goal);
+    bool addAgent(int start_location, int goal_location);
+    bool removeAgent(int agent_id);
+    int getNumAgents() const { return num_of_agents; }
 
 
     inline bool isObstacle(int loc) const { return my_map[loc]; }
@@ -74,6 +80,37 @@ public:
 	string getInstanceName() const { return agent_fname; }
     void savePaths(const string & file_name, const vector<Path*>& paths) const;
     bool validateSolution(const vector<Path*>& paths, int sum_of_costs, int num_of_colliding_pairs) const;
+    // Returns the next location if moving forward from (loc, orientation), or -1 if blocked
+    int getNextLocation(int loc, int orientation) const {
+        int row = getRowCoordinate(loc);
+        int col = getColCoordinate(loc);
+        int next_row = row, next_col = col;
+        switch (orientation) {
+            case 0: next_row = row - 1; break; // North
+            case 1: next_col = col + 1; break; // East
+            case 2: next_row = row + 1; break; // South
+            case 3: next_col = col - 1; break; // West
+        }
+        if (next_row < 0 || next_row >= num_of_rows || next_col < 0 || next_col >= num_of_cols)
+            return -1;
+        int next = linearizeCoordinate(next_row, next_col);
+        if (my_map[next])
+            return -1;
+        return next;
+    }
+    // Returns all possible (next_location, next_orientation) pairs for the three actions
+    std::vector<std::pair<int, int>> getNextStates(int loc, int orientation) const {
+        std::vector<std::pair<int, int>> result;
+        // Move forward
+        int next_loc = getNextLocation(loc, orientation);
+        if (next_loc != -1)
+            result.emplace_back(next_loc, orientation);
+        // Rotate left
+        result.emplace_back(loc, (orientation + 3) % 4);
+        // Rotate right
+        result.emplace_back(loc, (orientation + 1) % 4);
+        return result;
+    }
 private:
 	  // int moves_offset[MOVE_COUNT];
 	  vector<bool> my_map;

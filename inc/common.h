@@ -49,7 +49,8 @@ typedef std::chrono::duration<float> fsec;
 struct PathEntry
 {
 	int location = -1;
-	explicit PathEntry(int loc = -1) { location = loc; }
+	int orientation = -1; // 0=N, 1=E, 2=S, 3=W
+	explicit PathEntry(int loc = -1, int ori = -1) { location = loc; orientation = ori; }
 };
 
 typedef vector<PathEntry> Path;

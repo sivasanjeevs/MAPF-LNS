@@ -38,7 +38,7 @@ public:
     }
     bool getInitialSolution();
     bool run();
-    void validateSolution() const;
+    bool validateSolution() const;
     void writeIterStatsToFile(const string & file_name) const;
     void writeResultToFile(const string & file_name) const;
     void writePathsToFile(const string & file_name) const;

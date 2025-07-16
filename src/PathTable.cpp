@@ -6,10 +6,11 @@ void PathTable::insertPath(int agent_id, const Path& path)
         return;
     for (int t = 0; t < (int)path.size(); t++)
     {
-        if (table[path[t].location].size() <= t)
-            table[path[t].location].resize(t + 1, NO_AGENT);
-        // assert(table[path[t].location][t] == NO_AGENT);
-        table[path[t].location][t] = agent_id;
+        int loc = path[t].location;
+        int ori = path[t].orientation;
+        if (table[loc][ori].size() <= t)
+            table[loc][ori].resize(t + 1, NO_AGENT);
+        table[loc][ori][t] = agent_id;
     }
     assert(goals[path.back().location] == MAX_TIMESTEP);
     goals[path.back().location] = (int) path.size() - 1;
@@ -22,8 +23,10 @@ void PathTable::deletePath(int agent_id, const Path& path)
         return;
     for (int t = 0; t < (int)path.size(); t++)
     {
-        assert(table[path[t].location].size() > t && table[path[t].location][t] == agent_id);
-        table[path[t].location][t] = NO_AGENT;
+        int loc = path[t].location;
+        int ori = path[t].orientation;
+        assert(table[loc][ori].size() > t && table[loc][ori][t] == agent_id);
+        table[loc][ori][t] = NO_AGENT;
     }
     goals[path.back().location] = MAX_TIMESTEP;
     if (makespan == (int) path.size() - 1) // re-compute makespan
@@ -34,19 +37,29 @@ void PathTable::deletePath(int agent_id, const Path& path)
             if (time < MAX_TIMESTEP && time > makespan)
                 makespan = time;
         }
-
     }
 }
 
-bool PathTable::constrained(int from, int to, int to_time) const
+bool PathTable::constrained(int from, int from_ori, int to, int to_ori, int to_time) const
 {
+    // Remove debug prints and error logging
+    // Bounds checking
+    if (from < 0 || to < 0 || from_ori < 0 || to_ori < 0 || to_time < 0) {
+        return false;
+    }
+    if (from >= (int)table.size() || to >= (int)table.size()) {
+        return false;
+    }
+    if (from_ori >= (int)table[from].size() || to_ori >= (int)table[to].size()) {
+        return false;
+    }
     if (!table.empty())
     {
-        if (table[to].size() > to_time && table[to][to_time] != NO_AGENT)
-            return true;  // vertex conflict with agent table[to][to_time]
-        else if (table[to].size() >= to_time && table[from].size() > to_time && !table[to].empty() &&
-                 table[to][to_time - 1] != NO_AGENT && table[from][to_time] == table[to][to_time - 1])
-            return true;  // edge conflict with agent table[to][to_time - 1]
+        if ((int)table[to][to_ori].size() > to_time && table[to][to_ori][to_time] != NO_AGENT)
+            return true;  // vertex conflict with agent table[to][to_ori][to_time]
+        else if (table[to][to_ori].size() >= to_time && table[from][from_ori].size() > to_time && !table[to][to_ori].empty() &&
+                 table[to][to_ori][to_time - 1] != NO_AGENT && table[from][from_ori][to_time] == table[to][to_ori][to_time - 1])
+            return true;  // edge conflict with agent table[to][to_ori][to_time - 1]
     }
     if (!goals.empty())
     {
@@ -56,67 +69,36 @@ bool PathTable::constrained(int from, int to, int to_time) const
     return false;
 }
 
-void PathTable::getConflictingAgents(int agent_id, set<int>& conflicting_agents, int from, int to, int to_time) const
+void PathTable::getConflictingAgents(int agent_id, set<int>& conflicting_agents, int from, int from_ori, int to, int to_ori, int to_time) const
 {
     if (table.empty())
         return;
-    if (table[to].size() > to_time && table[to][to_time] != NO_AGENT)
-        conflicting_agents.insert(table[to][to_time]); // vertex conflict
-    if (table[to].size() >= to_time && table[from].size() > to_time &&
-        table[to][to_time - 1] != NO_AGENT && table[from][to_time] == table[to][to_time - 1])
-        conflicting_agents.insert(table[from][to_time]); // edge conflict
+    if (table[to][to_ori].size() > to_time && table[to][to_ori][to_time] != NO_AGENT)
+        conflicting_agents.insert(table[to][to_ori][to_time]); // vertex conflict
+    if (table[to][to_ori].size() >= to_time && table[from][from_ori].size() > to_time &&
+        table[to][to_ori][to_time - 1] != NO_AGENT && table[from][from_ori][to_time] == table[to][to_ori][to_time - 1])
+        conflicting_agents.insert(table[from][from_ori][to_time]); // edge conflict
     // TODO: collect target conflicts as well.
 }
 
-void PathTable::get_agents(set<int>& conflicting_agents, int loc) const
+void PathTable::get_agents(set<int>& conflicting_agents, int loc, int ori) const
 {
-    if (loc < 0)
+    if (loc < 0 || ori < 0)
         return;
-    for (auto agent : table[loc])
+    for (auto agent : table[loc][ori])
     {
         if (agent >= 0)
             conflicting_agents.insert(agent);
     }
 }
 
-void PathTable::get_agents(set<int>& conflicting_agents, int neighbor_size, int loc) const
-{
-    if (loc < 0 || table[loc].empty())
-        return;
-    int t_max = (int) table[loc].size() - 1;
-    while (table[loc][t_max] == NO_AGENT && t_max > 0)
-        t_max--;
-    if (t_max == 0)
-        return;
-    int t0 = rand() % t_max;
-    if (table[loc][t0] != NO_AGENT)
-        conflicting_agents.insert(table[loc][t0]);
-    int delta = 1;
-    while (t0 - delta >= 0 || t0 + delta <= t_max)
-    {
-        if (t0 - delta >= 0 && table[loc][t0 - delta] != NO_AGENT)
-        {
-            conflicting_agents.insert(table[loc][t0 - delta]);
-            if((int) conflicting_agents.size() == neighbor_size)
-                return;
-        }
-        if (t0 + delta <= t_max && table[loc][t0 + delta] != NO_AGENT)
-        {
-            conflicting_agents.insert(table[loc][t0 + delta]);
-            if((int) conflicting_agents.size() == neighbor_size)
-                return;
-        }
-        delta++;
-    }
-}
-
 // get the holding time after the earliest_timestep for a location
-int PathTable::getHoldingTime(int location, int earliest_timestep = 0) const
+int PathTable::getHoldingTime(int location, int orientation, int earliest_timestep) const
 {
-    if (table.empty() or (int) table[location].size() <= earliest_timestep)
+    if (table.empty() or (int) table[location][orientation].size() <= earliest_timestep)
         return earliest_timestep;
-    int rst = (int) table[location].size();
-    while (rst > earliest_timestep and table[location][rst - 1] == NO_AGENT)
+    int rst = (int) table[location][orientation].size();
+    while (rst > earliest_timestep and table[location][orientation][rst - 1] == NO_AGENT)
         rst--;
     return rst;
 }
@@ -128,9 +110,11 @@ void PathTableWC::insertPath(int agent_id, const Path& path)
         return;
     for (int t = 0; t < (int)path.size(); t++)
     {
-        if (table[path[t].location].size() <= t)
-            table[path[t].location].resize(t + 1);
-        table[path[t].location][t].push_back(agent_id);
+        int loc = path[t].location;
+        int ori = path[t].orientation;
+        if (table[loc][ori].size() <= t)
+            table[loc][ori].resize(t + 1);
+        table[loc][ori][t].push_back(agent_id);
     }
     assert(goals[path.back().location] == MAX_TIMESTEP);
     goals[path.back().location] = (int) path.size() - 1;
@@ -148,10 +132,12 @@ void PathTableWC::deletePath(int agent_id)
         return;
     for (int t = 0; t < (int)path.size(); t++)
     {
-        assert(table[path[t].location].size() > t &&
-               std::find (table[path[t].location][t].begin(), table[path[t].location][t].end(), agent_id)
-               != table[path[t].location][t].end());
-        table[path[t].location][t].remove(agent_id);
+        int loc = path[t].location;
+        int ori = path[t].orientation;
+        assert(table[loc][ori].size() > t &&
+               std::find (table[loc][ori][t].begin(), table[loc][ori][t].end(), agent_id)
+               != table[loc][ori][t].end());
+        table[loc][ori][t].remove(agent_id);
     }
     goals[path.back().location] = MAX_TIMESTEP;
     if (makespan == (int) path.size() - 1) // re-compute makespan
@@ -166,30 +152,30 @@ void PathTableWC::deletePath(int agent_id)
     }
 }
 
-int PathTableWC::getFutureNumOfCollisions(int loc, int time) const
+int PathTableWC::getFutureNumOfCollisions(int loc, int ori, int time) const
 {
     assert(goals[loc] == MAX_TIMESTEP);
     int rst = 0;
-    if (!table.empty() && (int)table[loc].size() > time)
+    if (!table.empty() && (int)table[loc][ori].size() > time)
     {
-        for (int t = time + 1; t < (int)table[loc].size(); t++)
-            rst += (int)table[loc][t].size();  // vertex conflict
+        for (int t = time + 1; t < (int)table[loc][ori].size(); t++)
+            rst += (int)table[loc][ori][t].size();  // vertex conflict
     }
     return rst;
 }
 
-int PathTableWC::getNumOfCollisions(int from, int to, int to_time) const
+int PathTableWC::getNumOfCollisions(int from, int from_ori, int to, int to_ori, int to_time) const
 {
     int rst = 0;
     if (!table.empty())
     {
-        if ((int)table[to].size() > to_time)
-            rst += (int)table[to][to_time].size();  // vertex conflict
-        if (from != to && table[to].size() >= to_time && table[from].size() > to_time)
+        if ((int)table[to][to_ori].size() > to_time)
+            rst += (int)table[to][to_ori][to_time].size();  // vertex conflict
+        if (from != to && table[to][to_ori].size() >= to_time && table[from][from_ori].size() > to_time)
         {
-            for (auto a1 : table[to][to_time - 1])
+            for (auto a1 : table[to][to_ori][to_time - 1])
             {
-                for (auto a2: table[from][to_time])
+                for (auto a2: table[from][from_ori][to_time])
                 {
                     if (a1 == a2)
                         rst++; // edge conflict
@@ -199,22 +185,22 @@ int PathTableWC::getNumOfCollisions(int from, int to, int to_time) const
     }
     if (!goals.empty())
     {
-        if (goals[to] < to_time)
+        if (goals[to] <= to_time)
             rst++; // target conflict
     }
     return rst;
 }
-bool PathTableWC::hasCollisions(int from, int to, int to_time) const
+bool PathTableWC::hasCollisions(int from, int from_ori, int to, int to_ori, int to_time) const
 {
     if (!table.empty())
     {
-        if ((int)table[to].size() > to_time and !table[to][to_time].empty())
+        if ((int)table[to][to_ori].size() > to_time && !table[to][to_ori][to_time].empty())
             return true; // vertex conflict
-        if (from != to && table[to].size() >= to_time && table[from].size() > to_time)
+        if (from != to && table[to][to_ori].size() >= to_time && table[from][from_ori].size() > to_time)
         {
-            for (auto a1 : table[to][to_time - 1])
+            for (auto a1 : table[to][to_ori][to_time - 1])
             {
-                for (auto a2: table[from][to_time])
+                for (auto a2: table[from][from_ori][to_time])
                 {
                     if (a1 == a2)
                         return true; // edge conflict
@@ -224,18 +210,18 @@ bool PathTableWC::hasCollisions(int from, int to, int to_time) const
     }
     if (!goals.empty())
     {
-        if (goals[to] < to_time)
+        if (goals[to] <= to_time)
             return true; // target conflict
     }
     return false;
 }
-bool PathTableWC::hasEdgeCollisions(int from, int to, int to_time) const
+bool PathTableWC::hasEdgeCollisions(int from, int from_ori, int to, int to_ori, int to_time) const
 {
-    if (!table.empty() && from != to && table[to].size() >= to_time && table[from].size() > to_time)
+    if (!table.empty() && from != to && table[to][to_ori].size() >= to_time && table[from][from_ori].size() > to_time)
     {
-        for (auto a1 : table[to][to_time - 1])
+        for (auto a1 : table[to][to_ori][to_time - 1])
         {
-            for (auto a2: table[from][to_time])
+            for (auto a2: table[from][from_ori][to_time])
             {
                 if (a1 == a2)
                     return true; // edge conflict
@@ -245,31 +231,32 @@ bool PathTableWC::hasEdgeCollisions(int from, int to, int to_time) const
     return false;
 }
 
-int PathTableWC::getAgentWithTarget(int target_location, int latest_timestep) const
+int PathTableWC::getAgentWithTarget(int target_location, int target_orientation, int latest_timestep) const
 {
-    if (table.empty() or goals.empty() or goals[target_location] > latest_timestep)
-        return -1;
-    for (auto id : table[target_location][goals[target_location]]) // look at all agents at the goal time
+    if (table.empty())
+        return NO_AGENT;
+    for (int t = 0; t <= latest_timestep && t < (int)table[target_location][target_orientation].size(); t++)
     {
-        if (paths[id]->back().location == target_location) // if agent id's goal is to, then this is the agent we want
+        for (int agent : table[target_location][target_orientation][t])
         {
-            return id;
+            if (agent != NO_AGENT)
+                return agent;
         }
     }
-    assert(false); // this should never happen
-    return -1;
+    return NO_AGENT;
 }
 
-int PathTableWC::getLastCollisionTimestep(int location) const
+int PathTableWC::getLastCollisionTimestep(int location, int orientation) const
 {
     if (table.empty())
         return -1;
-    for (int t = (int)table[location].size() - 1; t >= 0; t--)
+    int last = -1;
+    for (int t = 0; t < (int)table[location][orientation].size(); t++)
     {
-        if (!table[location][t].empty())
-            return t;
+        if (!table[location][orientation][t].empty())
+            last = t;
     }
-    return -1;
+    return last;
 }
 
 void PathTableWC::clear()

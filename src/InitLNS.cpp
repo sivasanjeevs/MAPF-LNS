@@ -426,51 +426,50 @@ bool InitLNS::updateCollidingPairs(set<pair<int, int>>& colliding_pairs, int age
         int to = path[t].location;
         if ((int)path_table.table[to].size() > t) // vertex conflicts
         {
-            for (auto id : path_table.table[to][t])
-            {
-                succ = true;
-                colliding_pairs.emplace(min(agent_id, id), max(agent_id, id));
-            }
+            for (const auto& id_list : path_table.table[to][t])
+                for (int id : id_list) {
+                    succ = true;
+                    colliding_pairs.emplace(std::min(agent_id, id), std::max(agent_id, id));
+                }
         }
         if (from != to && path_table.table[to].size() >= t && path_table.table[from].size() > t) // edge conflicts
         {
-            for (auto a1 : path_table.table[to][t - 1])
-            {
-                for (auto a2: path_table.table[from][t])
-                {
-                    if (a1 == a2)
-                    {
-                        succ = true;
-                        colliding_pairs.emplace(min(agent_id, a1), max(agent_id, a1));
-                        break;
-                    }
+            for (const auto& a1_list : path_table.table[to][t - 1])
+                for (int a1 : a1_list) {
+                    for (const auto& a2_list : path_table.table[from][t])
+                        for (int a2 : a2_list) {
+                            if (a1 == a2) {
+                                succ = true;
+                                colliding_pairs.emplace(std::min(agent_id, a1), std::max(agent_id, a1));
+                                break;
+                            }
+                        }
                 }
-            }
         }
         //auto id = getAgentWithTarget(to, t);
         //if (id >= 0) // this agent traverses the target of another agent
         //    colliding_pairs.emplace(min(agent_id, id), max(agent_id, id));
         if (!path_table.goals.empty() && path_table.goals[to] < t) // target conflicts
         { // this agent traverses the target of another agent
-            for (auto id : path_table.table[to][path_table.goals[to]]) // look at all agents at the goal time
-            {
-                if (agents[id].path.back().location == to) // if agent id's goal is to, then this is the agent we want
-                {
-                    succ = true;
-                    colliding_pairs.emplace(min(agent_id, id), max(agent_id, id));
-                    break;
+            for (const auto& id_list : path_table.table[to][path_table.goals[to]]) // look at all agents at the goal time
+                for (int id : id_list) {
+                    if (agents[id].path.back().location == to) // if agent id's goal is to, then this is the agent we want
+                    {
+                        succ = true;
+                        colliding_pairs.emplace(std::min(agent_id, id), std::max(agent_id, id));
+                        break;
+                    }
                 }
-            }
         }
     }
     int goal = path.back().location; // target conflicts - some other agent traverses the target of this agent
     for (int t = (int)path.size(); t < path_table.table[goal].size(); t++)
     {
-        for (auto id : path_table.table[goal][t])
-        {
-            succ = true;
-            colliding_pairs.emplace(min(agent_id, id), max(agent_id, id));
-        }
+        for (const auto& id_list : path_table.table[goal][t])
+            for (int id : id_list) {
+                succ = true;
+                colliding_pairs.emplace(std::min(agent_id, id), std::max(agent_id, id));
+            }
     }
     return succ;
 }
@@ -602,9 +601,11 @@ bool InitLNS::generateNeighborByTarget()
 
 
     for(int t = 0 ;t< path_table.table[agents[a].path_planner->start_location].size();t++){
-        for(auto id : path_table.table[agents[a].path_planner->start_location][t]){
-            if (id!=a)
-                A_start.insert(make_pair(t,id));
+        for(const auto& id_list : path_table.table[agents[a].path_planner->start_location][t]){
+            for(int single_id : id_list){
+                if (single_id != a)
+                    A_start.insert(make_pair(t, single_id));
+            }
         }
     }
 
@@ -736,7 +737,16 @@ int InitLNS::randomWalk(int agent_id)
     while (t <= path_table.makespan and
            (path_table.table[loc].size() <= t or
            path_table.table[loc][t].empty() or
-           (path_table.table[loc][t].size() == 1 and path_table.table[loc][t].front() == agent_id)))
+           ([](const std::vector<std::list<int>>& v, int agent_id) {
+               int count = 0;
+               for (const auto& l : v) count += l.size();
+               if (count == 1) {
+                   for (const auto& l : v)
+                       if (!l.empty() && l.front() == agent_id)
+                           return true;
+               }
+               return false;
+           }(path_table.table[loc][t], agent_id))))
     {
         auto next_locs = instance.getNeighbors(loc);
         next_locs.push_back(loc);
@@ -748,7 +758,15 @@ int InitLNS::randomWalk(int agent_id)
     if (t > path_table.makespan)
         return NO_AGENT;
     else
-        return *std::next(path_table.table[loc][t].begin(), rand() % path_table.table[loc][t].size());
+    {
+        std::vector<int> all_agents;
+        for (const auto& agent_list : path_table.table[loc][t]) {
+            all_agents.insert(all_agents.end(), agent_list.begin(), agent_list.end());
+        }
+        if (all_agents.empty())
+            return NO_AGENT;
+        return all_agents[rand() % all_agents.size()];
+    }
 }
 
 void InitLNS::writeIterStatsToFile(const string & file_name) const

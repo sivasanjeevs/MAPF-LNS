@@ -30,7 +30,10 @@
 
 void ReservationTable::insert2SIT(int location, int t_min, int t_max)
 {
-	assert(t_min >= 0 and t_min < t_max and !sit[location].empty());
+    if (sit[location].empty()) {
+        sit[location].emplace_back(0, 0, false);
+    }
+    assert(t_min >= 0 and t_min < t_max);
     for (auto it = sit[location].begin(); it != sit[location].end();)
     {
         if (t_min >= get<1>(*it))
@@ -62,7 +65,10 @@ void ReservationTable::insert2SIT(int location, int t_min, int t_max)
 
 void ReservationTable::insertSoftConstraint2SIT(int location, int t_min, int t_max)
 {
-    assert(t_min >= 0 && t_min < t_max and !sit[location].empty());
+    if (sit[location].empty()) {
+        sit[location].emplace_back(0, 0, false);
+    }
+    assert(t_min >= 0 && t_min < t_max);
     for (auto it = sit[location].begin(); it != sit[location].end(); ++it)
     {
         if (t_min >= get<1>(*it) || get<2>(*it))
@@ -174,6 +180,7 @@ void ReservationTable::insertSoftConstraint2SIT(int location, int t_min, int t_m
 // update SIT at the given location
 void ReservationTable::updateSIT(int location)
 {
+    assert(location < sit.size() && "location out of bounds in updateSIT");
     assert(sit[location].empty());
     // length constraints for the goal location
     if (location == goal_location) // we need to divide the same intervals into 2 parts [0, length_min) and [length_min, length_max + 1)
@@ -201,7 +208,7 @@ void ReservationTable::updateSIT(int location)
         {
             for (int t = 0; t < (int)constraint_table.path_table_for_CT->table[location].size(); t++)
             {
-                if (constraint_table.path_table_for_CT->table[location][t] != NO_AGENT)
+                if (!constraint_table.path_table_for_CT->table[location][t].empty())
                 {
                     insert2SIT(location, t, t+1);
                 }
@@ -219,12 +226,20 @@ void ReservationTable::updateSIT(int location)
                                       constraint_table.path_table_for_CT->table[to].size() + 1);
                 for (int t = 1; t < t_max; t++)
                 {
-                    if (constraint_table.path_table_for_CT->table[to][t - 1] != NO_AGENT and
-                        constraint_table.path_table_for_CT->table[to][t - 1] ==
-                        constraint_table.path_table_for_CT->table[from][t])
+                    if (!constraint_table.path_table_for_CT->table[to][t - 1].empty() &&
+                        !constraint_table.path_table_for_CT->table[from][t].empty())
                     {
-                        insert2SIT(location, t, t+1);
+                        // Check for any common agent
+                        for (int a1 : constraint_table.path_table_for_CT->table[to][t - 1]) {
+                            for (int a2 : constraint_table.path_table_for_CT->table[from][t]) {
+                                if (a1 == a2) {
+                                    insert2SIT(location, t, t+1);
+                                    goto next_t;
+                                }
+                            }
+                        }
                     }
+                next_t:;
                 }
             }
         }
@@ -307,6 +322,10 @@ void ReservationTable::updateSIT(int location)
         if (constraint_table.cat_goals[location] < MAX_TIMESTEP)
             insertSoftConstraint2SIT(location, constraint_table.cat_goals[location], MAX_TIMESTEP + 1);
     }
+    // Robustness: ensure sit[location] is never empty
+    if (sit[location].empty()) {
+        sit[location].emplace_back(0, 0, false);
+    }
 }
 
 // return <upper_bound, low, high,  vertex collision, edge collision>
@@ -318,7 +337,9 @@ list<tuple<int, int, int, bool, bool>> ReservationTable::get_safe_intervals(int 
 
     if (sit[to].empty())
         updateSIT(to);
-
+    if (sit[to].empty()) {
+        sit[to].emplace_back(0, 0, false);
+    }
     for(auto interval : sit[to])
     {
         if (lower_bound >= get<1>(interval))
@@ -353,8 +374,14 @@ list<tuple<int, int, int, bool, bool>> ReservationTable::get_safe_intervals(int 
 
 Interval ReservationTable::get_first_safe_interval(size_t location)
 {
-    if (sit[location].empty())
-	    updateSIT(location);
+    assert(location < sit.size() && "location out of bounds in get_first_safe_interval");
+    if (sit[location].empty()) {
+        updateSIT(location);
+        if (sit[location].empty()) {
+            throw std::runtime_error("No safe intervals found for location " + std::to_string(location));
+        }
+    }
+    assert(!sit[location].empty() && "No safe intervals found for location");
     return sit[location].front();
 }
 
@@ -365,6 +392,9 @@ bool ReservationTable::find_safe_interval(Interval& interval, size_t location, i
 		return false;
     if (sit[location].empty())
 	    updateSIT(location);
+    if (sit[location].empty()) {
+        sit[location].emplace_back(0, 0, false);
+    }
     for( auto & i : sit[location])
     {
         if ((int)get<0>(i) <= t_min && t_min < (int)get<1>(i))
@@ -382,7 +412,8 @@ int ReservationTable::get_earliest_arrival_time(int from, int to, int lower_boun
 {
     for (auto t = lower_bound; t < upper_bound; t++)
     {
-        if (!constraint_table.constrained(from, to, t))
+        // Always use orientation 0
+        if (!constraint_table.constrained(from, 0, to, 0, t))
             return t;
     }
     return -1;
@@ -392,7 +423,8 @@ int ReservationTable::get_earliest_no_collision_arrival_time(int from, int to, c
 {
     for (auto t = max(lower_bound, get<0>(interval)); t < min(upper_bound, get<1>(interval)); t++)
     {
-        if (!constraint_table.hasEdgeConflict(from, to, t))
+        // Always use orientation 0
+        if (!constraint_table.hasEdgeConflict(from, 0, to, 0, t))
             return t;
     }
     return -1;
