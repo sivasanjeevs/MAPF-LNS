@@ -13,8 +13,8 @@ public:
 
 	AStarNode() : LLNode() {}
     AStarNode(const AStarNode& other) : LLNode(other) {} // copy everything except for handles
-	AStarNode(int loc, int g_val, int h_val, LLNode* parent, int timestep, int num_of_conflicts) :
-		LLNode(loc, g_val, h_val, parent, timestep, num_of_conflicts) {}
+	AStarNode(int loc, int orientation, int g_val, int h_val, LLNode* parent, int timestep, int num_of_conflicts) :
+		LLNode(loc, orientation, g_val, h_val, parent, timestep, num_of_conflicts) {}
 
 
 	~AStarNode() {}
@@ -25,8 +25,9 @@ public:
 		size_t operator()(const AStarNode* n) const
 		{
 			size_t loc_hash = std::hash<int>()(n->location);
+			size_t ori_hash = std::hash<int>()(n->orientation);
 			size_t timestep_hash = std::hash<int>()(n->timestep);
-			return (loc_hash ^ (timestep_hash << 1));
+			return (loc_hash ^ (ori_hash << 1) ^ (timestep_hash << 2));
 		}
 	};
 
@@ -39,6 +40,7 @@ public:
 		{
 			return (s1 == s2) || (s1 && s2 &&
                         s1->location == s2->location &&
+                        s1->orientation == s2->orientation &&
                         s1->timestep == s2->timestep &&
 						s1->wait_at_goal == s2->wait_at_goal &&
 						s1->is_goal == s2->is_goal);

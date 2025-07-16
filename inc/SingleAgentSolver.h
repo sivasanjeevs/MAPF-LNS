@@ -6,6 +6,7 @@ class LLNode // low-level node
 {
 public:
 	int location = 0;
+	int orientation = 0; // 0=N, 1=E, 2=S, 3=W
 	int g_val = 0;
 	int h_val = 0;
 	LLNode* parent = nullptr;
@@ -55,8 +56,8 @@ public:
 
 
 	LLNode() {}
-	LLNode(int location, int g_val, int h_val, LLNode* parent, int timestep, int num_of_conflicts) :
-		location(location), g_val(g_val), h_val(h_val), parent(parent), timestep(timestep),
+	LLNode(int location, int orientation, int g_val, int h_val, LLNode* parent, int timestep, int num_of_conflicts) :
+		location(location), orientation(orientation), g_val(g_val), h_val(h_val), parent(parent), timestep(timestep),
 		num_of_conflicts(num_of_conflicts) {}
 	LLNode(const LLNode& other) { copy(other); }
     ~LLNode()= default;
@@ -64,6 +65,7 @@ public:
 	void copy(const LLNode& other)
 	{
 		location = other.location;
+		orientation = other.orientation;
 		g_val = other.g_val;
 		h_val = other.h_val;
 		parent = other.parent;

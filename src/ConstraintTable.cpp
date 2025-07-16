@@ -13,11 +13,11 @@ int ConstraintTable::getMaxTimestep() const // everything is static after the ma
         rst = max(rst, landmarks.rbegin()->first);
     return rst;
 }
-int ConstraintTable::getLastCollisionTimestep(int location) const
+int ConstraintTable::getLastCollisionTimestep(int location, int orientation) const
 {
     int rst = -1;
     if (path_table_for_CAT != nullptr)
-        rst = path_table_for_CAT->getLastCollisionTimestep(location);
+        rst = path_table_for_CAT->getLastCollisionTimestep(location, orientation);
     if (!cat.empty())
     {
         for (auto t = cat[location].size() - 1; t > rst; t--)
@@ -235,12 +235,12 @@ list<pair<int, int> > ConstraintTable::decodeBarrier(int x, int y, int t) const
 	return rst;
 }
 
-bool ConstraintTable::constrained(size_t loc, int t) const
+bool ConstraintTable::constrained(size_t loc, int orientation, int t) const
 {
 	assert(loc >= 0);
 	if (loc < map_size)
 	{
-	    if (path_table_for_CT != nullptr and path_table_for_CT->constrained(loc, loc, t))
+	    if (path_table_for_CT != nullptr && path_table_for_CT->constrained(loc, orientation, loc, orientation, t))
 	        return true;
 		const auto& it = landmarks.find(t);
 		if (it != landmarks.end() && it->second != loc)
@@ -259,10 +259,10 @@ bool ConstraintTable::constrained(size_t loc, int t) const
 	}
 	return false;
 }
-bool ConstraintTable::constrained(size_t curr_loc, size_t next_loc, int next_t) const
+bool ConstraintTable::constrained(size_t curr_loc, int curr_ori, size_t next_loc, int next_ori, int next_t) const
 {
-    return (path_table_for_CT != nullptr and path_table_for_CT->constrained(curr_loc, next_loc, next_t)) or
-        constrained(getEdgeIndex(curr_loc, next_loc), next_t);
+    return (path_table_for_CT != nullptr && path_table_for_CT->constrained(curr_loc, curr_ori, next_loc, next_ori, next_t)) ||
+        constrained(getEdgeIndex(curr_loc, next_loc), 0, next_t);
 }
 
 void ConstraintTable::copy(const ConstraintTable& other)
@@ -282,54 +282,54 @@ void ConstraintTable::copy(const ConstraintTable& other)
 }
 
 
-int ConstraintTable::getNumOfConflictsForStep(size_t curr_id, size_t next_id, int next_timestep) const
+int ConstraintTable::getNumOfConflictsForStep(size_t curr_id, int curr_ori, size_t next_id, int next_ori, int next_timestep) const
 {
     int rst = 0;
     if (path_table_for_CAT != nullptr)
-        rst = path_table_for_CAT->getNumOfCollisions(curr_id, next_id, next_timestep);
+        rst = path_table_for_CAT->getNumOfCollisions(curr_id, curr_ori, next_id, next_ori, next_timestep);
 
     if (!cat.empty())
     {
-        if (cat[next_id].size() > next_timestep and cat[next_id][next_timestep])
+        if (cat[next_id].size() > next_timestep && cat[next_id][next_timestep])
             rst++;
-        if (curr_id != next_id and cat[next_id].size() >= next_timestep and cat[curr_id].size() > next_timestep and
-                cat[next_id][next_timestep - 1]and cat[curr_id][next_timestep])
+        if (curr_id != next_id && cat[next_id].size() >= next_timestep && cat[curr_id].size() > next_timestep &&
+                cat[next_id][next_timestep - 1] && cat[curr_id][next_timestep])
             rst++;
         if (cat_goals[next_id] < next_timestep)
             rst++;
     }
     return rst;
 }
-bool ConstraintTable::hasConflictForStep(size_t curr_id, size_t next_id, int next_timestep) const
+bool ConstraintTable::hasConflictForStep(size_t curr_id, int curr_ori, size_t next_id, int next_ori, int next_timestep) const
 {
-    if (path_table_for_CAT != nullptr and path_table_for_CAT->hasCollisions(curr_id, next_id, next_timestep))
+    if (path_table_for_CAT != nullptr && path_table_for_CAT->hasCollisions(curr_id, curr_ori, next_id, next_ori, next_timestep))
         return true;
     if (!cat.empty())
     {
-        if (cat[next_id].size() > next_timestep and cat[next_id][next_timestep])
+        if (cat[next_id].size() > next_timestep && cat[next_id][next_timestep])
             return true;
-        if (curr_id != next_id and cat[next_id].size() >= next_timestep and cat[curr_id].size() > next_timestep and
-            cat[next_id][next_timestep - 1]and cat[curr_id][next_timestep])
+        if (curr_id != next_id && cat[next_id].size() >= next_timestep && cat[curr_id].size() > next_timestep &&
+            cat[next_id][next_timestep - 1] && cat[curr_id][next_timestep])
             return true;
         if (cat_goals[next_id] < next_timestep)
             return true;
     }
     return false;
 }
-bool ConstraintTable::hasEdgeConflict(size_t curr_id, size_t next_id, int next_timestep) const
+bool ConstraintTable::hasEdgeConflict(size_t curr_id, int curr_ori, size_t next_id, int next_ori, int next_timestep) const
 {
     assert(curr_id != next_id);
-    if (path_table_for_CAT != nullptr and path_table_for_CAT->hasEdgeCollisions(curr_id, next_id, next_timestep))
+    if (path_table_for_CAT != nullptr && path_table_for_CAT->hasEdgeCollisions(curr_id, curr_ori, next_id, next_ori, next_timestep))
         return true;
-    return !cat.empty() and curr_id != next_id and cat[next_id].size() >= next_timestep and
-            cat[curr_id].size() > next_timestep and
-            cat[next_id][next_timestep - 1] and cat[curr_id][next_timestep];
+    return !cat.empty() && curr_id != next_id && cat[next_id].size() >= next_timestep &&
+            cat[curr_id].size() > next_timestep &&
+            cat[next_id][next_timestep - 1] && cat[curr_id][next_timestep];
 }
-int ConstraintTable::getFutureNumOfCollisions(int loc, int t) const
+int ConstraintTable::getFutureNumOfCollisions(int loc, int orientation, int t) const
 {
     int rst = 0;
     if (path_table_for_CAT != nullptr)
-        rst = path_table_for_CAT->getFutureNumOfCollisions(loc, t);
+        rst = path_table_for_CAT->getFutureNumOfCollisions(loc, orientation, t);
     if (!cat.empty())
     {
         for (auto timestep = t + 1; timestep < cat[loc].size(); timestep++)
@@ -341,25 +341,25 @@ int ConstraintTable::getFutureNumOfCollisions(int loc, int t) const
 }
 
 // return the earliest timestep that the agent can hold the location
-int ConstraintTable::getHoldingTime(int location, int earliest_timestep) const
+int ConstraintTable::getHoldingTime(int location, int orientation, int earliest_timestep) const
 {
     // path table
     int rst = earliest_timestep;
-    if (path_table_for_CT!= nullptr)
-        rst = path_table_for_CT->getHoldingTime(location, earliest_timestep);
+    if (path_table_for_CT != nullptr)
+        rst = path_table_for_CT->getHoldingTime(location, orientation, earliest_timestep);
     // CT
-	auto it = ct.find(location);
-	if (it != ct.end())
-	{
-		for (auto time_range : it->second)
-			rst = max(rst, time_range.second);
-	}
-	// Landmark
-	for (auto landmark : landmarks)
-	{
-		if (landmark.second != location)
-			rst = max(rst, (int)landmark.first + 1);
-	}
+    auto it = ct.find(location);
+    if (it != ct.end())
+    {
+        for (auto time_range : it->second)
+            rst = max(rst, time_range.second);
+    }
+    // Landmark
+    for (auto landmark : landmarks)
+    {
+        if (landmark.second != location)
+            rst = max(rst, (int)landmark.first + 1);
+    }
 
-	return rst;
+    return rst;
 }

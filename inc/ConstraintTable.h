@@ -13,17 +13,17 @@ public:
     const PathTable * path_table_for_CT;
     const PathTableWC * path_table_for_CAT;
 
-	int getHoldingTime(int location, int earliest_timestep) const; // the earliest timestep that the agent can hold the location after earliest_timestep
+	int getHoldingTime(int location, int orientation, int earliest_timestep) const; // orientation-aware
     int getMaxTimestep() const; // everything is static after the max timestep
-    int getLastCollisionTimestep(int location) const;
+    int getLastCollisionTimestep(int location, int orientation) const;
     // void clear(){ct.clear(); cat_small.clear(); cat_large.clear(); landmarks.clear(); length_min = 0, length_max = INT_MAX; latest_timestep = 0;}
 
-	bool constrained(size_t loc, int t) const;
-    bool constrained(size_t curr_loc, size_t next_loc, int next_t) const;
-	int getNumOfConflictsForStep(size_t curr_id, size_t next_id, int next_timestep) const;
-	bool hasConflictForStep(size_t curr_id, size_t next_id, int next_timestep) const;
-    bool hasEdgeConflict(size_t curr_id, size_t next_id, int next_timestep) const;
-    int getFutureNumOfCollisions(int loc, int t) const;
+	bool constrained(size_t loc, int orientation, int t) const;
+    bool constrained(size_t curr_loc, int curr_ori, size_t next_loc, int next_ori, int next_t) const;
+	int getNumOfConflictsForStep(size_t curr_id, int curr_ori, size_t next_id, int next_ori, int next_timestep) const;
+	bool hasConflictForStep(size_t curr_id, int curr_ori, size_t next_id, int next_ori, int next_timestep) const;
+    bool hasEdgeConflict(size_t curr_id, int curr_ori, size_t next_id, int next_ori, int next_timestep) const;
+    int getFutureNumOfCollisions(int loc, int orientation, int t) const;
 
 	ConstraintTable(size_t num_col, size_t map_size, const PathTable* path_table_for_CT = nullptr,
 	        const PathTableWC * path_table_for_CAT = nullptr) :

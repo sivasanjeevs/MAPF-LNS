@@ -20,6 +20,9 @@ class DynamicMAPFVisualizer:
         self.agents = []  # List of (start, goal, path, color, agent_id)
         self.next_agent_id = 0
         
+        self.global_timestep = 0
+        self.agent_histories = []  # List of lists: one per agent, each is a list of positions
+        
         # Visualization state
         self.running = True
         self.paused = False
@@ -38,13 +41,24 @@ class DynamicMAPFVisualizer:
         self.pathfinding_thread = None
         self.pathfinding_busy = False
         
+        # Loading state
+        self.loading = False
+        self.loading_error = None
+        self.loading_thread = None
+        
         # Initialize pygame
         pygame.init()
         self.setup_display()
+        self.create_background_surface()  # Create static background
         
-        # Load initial agents if provided
+        # Load initial agents if provided, in a background thread if agent_num is large
         if initial_scen_file and initial_agent_num > 0:
-            self.load_initial_agents(initial_scen_file, initial_agent_num)
+            if initial_agent_num > 20:
+                self.loading = True
+                self.loading_thread = threading.Thread(target=self._load_initial_agents_thread, args=(initial_scen_file, initial_agent_num))
+                self.loading_thread.start()
+            else:
+                self.load_initial_agents(initial_scen_file, initial_agent_num)
     
     def parse_map(self, map_filename):
         """Parse map file to get obstacles and dimensions"""
@@ -97,6 +111,25 @@ class DynamicMAPFVisualizer:
         self.grid_color = (200, 200, 200)
         self.bg_color = (255, 255, 255)
     
+    def create_background_surface(self):
+        """Draw static grid and obstacles to a background surface for fast blitting."""
+        self.bg_surface = pygame.Surface((self.width, self.height))
+        self.bg_surface.fill(self.bg_color)
+        # Draw obstacles
+        for (r, c) in self.obstacles:
+            pygame.draw.rect(self.bg_surface, (0, 0, 0),
+                (self.margin + c * self.cell_size, self.margin + r * self.cell_size,
+                 self.cell_size, self.cell_size))
+        # Draw grid
+        for x in range(self.ncols + 1):
+            pygame.draw.line(self.bg_surface, self.grid_color,
+                (self.margin + x * self.cell_size, self.margin),
+                (self.margin + x * self.cell_size, self.margin + self.nrows * self.cell_size), 1)
+        for y in range(self.nrows + 1):
+            pygame.draw.line(self.bg_surface, self.grid_color,
+                (self.margin, self.margin + y * self.cell_size),
+                (self.margin + self.ncols * self.cell_size, self.margin + y * self.cell_size), 1)
+
     def load_initial_agents(self, scen_file: str, agent_num: int):
         """Load initial agents from scenario file"""
         starts, goals = self.parse_scen_file(scen_file, agent_num)
@@ -109,11 +142,15 @@ class DynamicMAPFVisualizer:
         goals = []
         with open(scen_file, 'r') as f:
             lines = f.readlines()
-            for line in lines[1:agent_num+1]:  # Skip version line
+            for idx, line in enumerate(lines[1:agent_num+1]):  # Skip version line
                 parts = line.strip().split('\t')
                 if len(parts) >= 8:
                     start_col, start_row = int(parts[4]), int(parts[5])
                     goal_col, goal_row = int(parts[6]), int(parts[7])
+                    # Validation: check if within map bounds
+                    if not (0 <= start_row < self.nrows and 0 <= start_col < self.ncols and 0 <= goal_row < self.nrows and 0 <= goal_col < self.ncols):
+                        print(f"Warning: Agent {idx} start or goal out of bounds and will be skipped. Start=({start_row},{start_col}), Goal=({goal_row},{goal_col}), Map=({self.nrows},{self.ncols})")
+                        continue
                     starts.append((start_row, start_col))
                     goals.append((goal_row, goal_col))
         return starts, goals
@@ -221,11 +258,10 @@ class DynamicMAPFVisualizer:
         if start in self.obstacles or goal in self.obstacles:
             print("Cannot place agent on obstacle")
             return False
-        
         # Check if positions are already occupied
         for agent in self.agents:
             if start == agent[0] or start == agent[1] or goal == agent[0] or goal == agent[1]:
-                print("Position already occupied")
+                print(f"Position already occupied: new agent start={start}, goal={goal} conflicts with agent id={agent[4]}, start={agent[0]}, goal={agent[1]}")
                 return False
         
         # Add new agent with temporary path
@@ -235,12 +271,16 @@ class DynamicMAPFVisualizer:
         
         self.agents.append((start, goal, temp_path, (0,0,0), agent_id))  # Color will be set below
         
+        
         # Assign unique colors to all agents
         colors = self.get_agent_colors(len(self.agents))
         for i in range(len(self.agents)):
             start, goal, path, _, agent_id = self.agents[i]
             self.agents[i] = (start, goal, path, colors[i], agent_id)
         
+        # Pad the new agent's history with its start position for all previous timesteps
+        self.agent_histories.append([start] * self.global_timestep)
+    
         # Replan all paths
         self.replan_all_paths()
         return True
@@ -314,6 +354,12 @@ class DynamicMAPFVisualizer:
             for i, (start, goal, old_path, _, agent_id) in enumerate(self.agents):
                 if i < len(new_paths) and new_paths[i]:
                     self.agents[i] = (starts[i], goal, new_paths[i], colors[i], agent_id)
+                    # Update agent history:
+                    # - If agent_histories[i] is shorter than global_timestep, pad with last known position
+                    while len(self.agent_histories[i]) < self.global_timestep:
+                        self.agent_histories[i].append(self.agent_histories[i][-1])
+                    # - Now, append the new path (from current timestep onward)
+                    self.agent_histories[i] += new_paths[i][1:]  # [1:] to avoid duplicating current position
             
             # Update makespan
             self.makespan = max(len(agent[2]) for agent in self.agents) if self.agents else 1
@@ -323,6 +369,8 @@ class DynamicMAPFVisualizer:
             
             # Check for collisions after replanning
             self.check_collisions()
+            # After updating, write to paths.txt
+            self.write_paths_txt()
         else:
             print("Pathfinding failed, keeping existing paths")
     
@@ -389,19 +437,15 @@ class DynamicMAPFVisualizer:
                             self.cell_size, self.cell_size))
     
     def draw_agents(self):
-        """Draw all agents"""
+        """Draw all agents (optimized: only draw path up to current frame)"""
         for start, goal, path, color, agent_id in self.agents:
-            # Draw start and goal markers
-            start_pos = (self.margin + start[1] * self.cell_size + self.cell_size // 2, 
+            # Draw start and goal markers (unchanged)
+            start_pos = (self.margin + start[1] * self.cell_size + self.cell_size // 2,
                         self.margin + start[0] * self.cell_size + self.cell_size // 2)
-            goal_pos = (self.margin + goal[1] * self.cell_size + self.cell_size // 2, 
+            goal_pos = (self.margin + goal[1] * self.cell_size + self.cell_size // 2,
                        self.margin + goal[0] * self.cell_size + self.cell_size // 2)
-            
-            # Start: circle
             pygame.draw.circle(self.screen, color, start_pos, self.cell_size // 4, 0)
             pygame.draw.circle(self.screen, (255, 255, 255), start_pos, self.cell_size // 4, 2)
-            
-            # Goal: star
             for angle in range(0, 360, 72):
                 x1 = int(goal_pos[0] + self.cell_size // 4 * np.cos(np.radians(angle)))
                 y1 = int(goal_pos[1] + self.cell_size // 4 * np.sin(np.radians(angle)))
@@ -409,22 +453,36 @@ class DynamicMAPFVisualizer:
                 y2 = int(goal_pos[1] + self.cell_size // 8 * np.sin(np.radians(angle + 36)))
                 pygame.draw.line(self.screen, color, goal_pos, (x1, y1), 2)
                 pygame.draw.line(self.screen, color, goal_pos, (x2, y2), 2)
-            
-            # Draw path trail
+            # Draw path trail (only up to current frame)
             if len(path) > 1:
                 trail = path[:min(self.frame + 1, len(path))]
-                if len(trail) >= 2:  # Only draw if we have at least 2 points
-                    points = [(self.margin + c * self.cell_size + self.cell_size // 2, 
-                              self.margin + r * self.cell_size + self.cell_size // 2) for r, c in trail]
+                if len(trail) >= 2:
+                    points = [(self.margin + c * self.cell_size + self.cell_size // 2,
+                              self.margin + r * self.cell_size + self.cell_size // 2) for r, c, *_ in trail]
                     pygame.draw.lines(self.screen, color, False, points, max(2, self.cell_size // 15))
-            
-            # Draw current position
+            # Draw current position and orientation
             if path:
-                current_pos = path[min(self.frame, len(path) - 1)]
-                pos_pix = (self.margin + current_pos[1] * self.cell_size + self.cell_size // 2, 
-                          self.margin + current_pos[0] * self.cell_size + self.cell_size // 2)
+                entry = path[min(self.frame, len(path) - 1)]
+                if len(entry) == 3:
+                    r, c, orientation = entry
+                else:
+                    r, c = entry
+                    orientation = 0  # fallback if orientation missing
+                pos_pix = (self.margin + c * self.cell_size + self.cell_size // 2,
+                          self.margin + r * self.cell_size + self.cell_size // 2)
                 pygame.draw.circle(self.screen, color, pos_pix, max(8, self.cell_size // 2 - 2))
-                
+                # Draw orientation arrow/triangle
+                arrow_len = self.cell_size // 2 - 4
+                angle_map = {0: -90, 1: 0, 2: 90, 3: 180}  # N, E, S, W
+                angle = angle_map.get(orientation, 0)
+                # Triangle points
+                tip = (pos_pix[0] + arrow_len * np.cos(np.radians(angle)),
+                       pos_pix[1] + arrow_len * np.sin(np.radians(angle)))
+                left = (pos_pix[0] + (arrow_len // 2) * np.cos(np.radians(angle + 120)),
+                        pos_pix[1] + (arrow_len // 2) * np.sin(np.radians(angle + 120)))
+                right = (pos_pix[0] + (arrow_len // 2) * np.cos(np.radians(angle - 120)),
+                         pos_pix[1] + (arrow_len // 2) * np.sin(np.radians(angle - 120)))
+                pygame.draw.polygon(self.screen, (0, 0, 0), [tip, left, right])
                 # Agent number
                 text = self.font.render(str(agent_id), True, (255, 255, 255))
                 text_rect = text.get_rect(center=pos_pix)
@@ -476,6 +534,7 @@ class DynamicMAPFVisualizer:
         """Update simulation state"""
         if not self.paused:
             self.frame = (self.frame + 1) % self.makespan
+            self.global_timestep += 1
             
             # Check for collisions at current timestep (only log occasionally to avoid spam)
             if self.frame % 10 == 0:  # Check every 10 timesteps
@@ -547,17 +606,36 @@ class DynamicMAPFVisualizer:
     
     def draw(self):
         """Draw everything"""
-        self.screen.fill(self.bg_color)
-        self.draw_obstacles()
-        self.draw_grid()
+        # Use cached background
+        self.screen.blit(self.bg_surface, (0, 0))
         self.draw_agents()
         self.draw_legend()
+        pygame.display.flip()
+    
+    def draw_loading(self):
+        self.screen.fill((30, 30, 30))
+        msg = "Loading agents and computing paths..."
+        text = self.font.render(msg, True, (255, 255, 255))
+        rect = text.get_rect(center=(self.width // 2, self.height // 2))
+        self.screen.blit(text, rect)
+        if self.loading_error:
+            err_text = self.small_font.render(f"Error: {self.loading_error}", True, (255, 80, 80))
+            err_rect = err_text.get_rect(center=(self.width // 2, self.height // 2 + 40))
+            self.screen.blit(err_text, err_rect)
         pygame.display.flip()
     
     def run(self):
         """Main game loop"""
         while self.running:
             self.handle_events()
+            if self.loading:
+                self.draw_loading()
+                self.clock.tick(10)
+                continue
+            if self.loading_error:
+                self.draw_loading()
+                self.clock.tick(10)
+                continue
             self.update()
             self.draw()
             
@@ -567,6 +645,19 @@ class DynamicMAPFVisualizer:
                 self.clock.tick(15)
         
         pygame.quit()
+    
+    def write_paths_txt(self):
+        with open("paths.txt", "w") as f:
+            for i, history in enumerate(self.agent_histories):
+                path_str = " -> ".join(f"({r},{c})" for r, c in history)
+                f.write(f"Agent {i}: {path_str}\n")
+
+    def _load_initial_agents_thread(self, scen_file, agent_num):
+        try:
+            self.load_initial_agents(scen_file, agent_num)
+        except Exception as e:
+            self.loading_error = str(e)
+        self.loading = False
 
 def main():
     if len(sys.argv) < 2:
@@ -581,4 +672,4 @@ def main():
     visualizer.run()
 
 if __name__ == '__main__':
-    main() 
+    main()
