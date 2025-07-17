@@ -312,6 +312,24 @@ bool InitLNS::runPP()
     {
         int id = *p;
         agents[id].path = agents[id].path_planner->findPath(constraint_table);
+        // Debug: Print the path and orientation for this agent
+        cout << "[DEBUG] Agent " << agents[id].id << " path:";
+        for (const auto& entry : agents[id].path) {
+            int row = instance.getRowCoordinate(entry.location);
+            int col = instance.getColCoordinate(entry.location);
+            cout << " (" << row << "," << col << "," << entry.orientation << ")";
+        }
+        cout << endl;
+        // Check for empty path or invalid orientation
+        if (agents[id].path.empty()) {
+            cout << "[ERROR] Agent " << agents[id].id << " has an EMPTY PATH! Aborting this InitLNS iteration." << endl;
+            return false; // Abort the InitLNS run gracefully
+        }
+        for (const auto& entry : agents[id].path) {
+            if (entry.orientation < 0 || entry.orientation > 3) {
+                cout << "[WARNING] Agent " << agents[id].id << " has INVALID ORIENTATION in path: (" << entry.location << "," << entry.orientation << ")" << endl;
+            }
+        }
         assert(!agents[id].path.empty() && agents[id].path.back().location == agents[id].path_planner->goal_location);
         if (agents[id].path_planner->num_collisions > 0)
             updateCollidingPairs(neighbor.colliding_pairs, agents[id].id, agents[id].path);
@@ -385,6 +403,22 @@ bool InitLNS::getInitialSolution()
     for (auto id : neighbor.agents)
     {
         agents[id].path = agents[id].path_planner->findPath(constraint_table);
+        // Debug: Print the path and orientation for this agent
+        cout << "[DEBUG] Agent " << agents[id].id << " path:";
+        for (const auto& entry : agents[id].path) {
+            cout << " (" << entry.location << "," << entry.orientation << ")";
+        }
+        cout << endl;
+        // Check for empty path or invalid orientation
+        if (agents[id].path.empty()) {
+            cout << "[ERROR] Agent " << agents[id].id << " has an EMPTY PATH! Aborting this InitLNS iteration." << endl;
+            return false; // Abort the InitLNS run gracefully
+        }
+        for (const auto& entry : agents[id].path) {
+            if (entry.orientation < 0 || entry.orientation > 3) {
+                cout << "[WARNING] Agent " << agents[id].id << " has INVALID ORIENTATION in path: (" << entry.location << "," << entry.orientation << ")" << endl;
+            }
+        }
         assert(!agents[id].path.empty() && agents[id].path.back().location == agents[id].path_planner->goal_location);
         if (agents[id].path_planner->num_collisions > 0)
             updateCollidingPairs(colliding_pairs, agents[id].id, agents[id].path);

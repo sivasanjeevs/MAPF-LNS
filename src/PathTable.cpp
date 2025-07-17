@@ -8,10 +8,20 @@ void PathTable::insertPath(int agent_id, const Path& path)
     {
         int loc = path[t].location;
         int ori = path[t].orientation;
-        if (table[loc][ori].size() <= t)
+        // Ensure table is large enough for loc
+        if (loc >= (int)table.size())
+            table.resize(loc + 1, std::vector<std::vector<int>>(4));
+        // Ensure table[loc] is large enough for ori (should always be 4, but just in case)
+        if (ori >= (int)table[loc].size())
+            table[loc].resize(ori + 1);
+        // Ensure table[loc][ori] is large enough for t
+        if ((int)table[loc][ori].size() <= t)
             table[loc][ori].resize(t + 1, NO_AGENT);
         table[loc][ori][t] = agent_id;
     }
+    // Ensure goals is large enough for the goal location
+    if ((int)goals.size() <= path.back().location)
+        goals.resize(path.back().location + 1, MAX_TIMESTEP);
     assert(goals[path.back().location] == MAX_TIMESTEP);
     goals[path.back().location] = (int) path.size() - 1;
     makespan = max(makespan, (int) path.size() - 1);

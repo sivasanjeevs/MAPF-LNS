@@ -381,7 +381,24 @@ bool LNS::runPP()
                  ", remaining time = " << T - ((fsec)(Time::now() - time)).count() << " seconds. " << endl
                  << "Agent " << agents[id].id << endl;
         agents[id].path = agents[id].path_planner->findPath(constraint_table);
-        if (agents[id].path.empty()) break;
+        // Debug: Print the path and orientation for this agent
+        cout << "[DEBUG] Agent " << agents[id].id << " path:";
+        for (const auto& entry : agents[id].path) {
+            int row = instance.getRowCoordinate(entry.location);
+            int col = instance.getColCoordinate(entry.location);
+            cout << " (" << row << "," << col << "," << entry.orientation << ")";
+        }
+        cout << endl;
+        // Check for empty path or invalid orientation
+        if (agents[id].path.empty()) {
+            cout << "[ERROR] Agent " << agents[id].id << " has an EMPTY PATH! Aborting this LNS iteration." << endl;
+            return false; // Abort the LNS run gracefully
+        }
+        for (const auto& entry : agents[id].path) {
+            if (entry.orientation < 0 || entry.orientation > 3) {
+                cout << "[ERROR] Agent " << agents[id].id << " has INVALID ORIENTATION in path: (" << instance.getRowCoordinate(entry.location) << "," << instance.getColCoordinate(entry.location) << "," << entry.orientation << ")" << endl;
+            }
+        }
         neighbor.sum_of_costs += (int)agents[id].path.size() - 1;
         if (neighbor.sum_of_costs >= neighbor.old_sum_of_costs)
             break;
@@ -899,8 +916,7 @@ void LNS::writePathsToFile(const string & file_name) const
     {
         output << "Agent " << agent.id << ":";
         for (const auto &state : agent.path)
-            output << "(" << instance.getRowCoordinate(state.location) << "," <<
-                            instance.getColCoordinate(state.location) << ")->";
+            output << "(" << instance.getRowCoordinate(state.location) << "," << instance.getColCoordinate(state.location) << "," << state.orientation << ")->";
         output << endl;
     }
     output.close();

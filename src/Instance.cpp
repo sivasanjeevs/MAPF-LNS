@@ -560,12 +560,17 @@ bool Instance::validateSolution(const vector<Path*>& paths, int sum_of_costs, in
             int t = 1;
             for (; t < (int) paths[a1]->size(); t++)
             {
-                if (paths[a1]->at(t).location == paths[a2]->at(t).location) // vertex conflict
+                // Compare only (row, col) for vertex conflict
+                int row1 = getRowCoordinate(paths[a1]->at(t).location);
+                int col1 = getColCoordinate(paths[a1]->at(t).location);
+                int row2 = getRowCoordinate(paths[a2]->at(t).location);
+                int col2 = getColCoordinate(paths[a2]->at(t).location);
+                if (row1 == row2 && col1 == col2) // vertex conflict
                 {
                     if (num_of_colliding_pairs == 0)
                     {
                         cerr << "Find a vertex conflict between agents " << a1 << " and " << a2 <<
-                             " at location " << paths[a1]->at(t).location << " at timestep " << t << endl;
+                             " at location (" << row1 << "," << col1 << ") at timestep " << t << endl;
                         exit(-1);
                     }
                     collisions++;

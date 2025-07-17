@@ -184,7 +184,7 @@ class DynamicMAPFVisualizer:
                 f.write(f"{i}\t{self.map_file}\t{self.ncols}\t{self.nrows}\t{s[1]}\t{s[0]}\t{g[1]}\t{g[0]}\t0\n")
     
     def parse_paths_file(self, filename: str):
-        """Parse paths from output file"""
+        """Parse paths from output file, including orientation if present"""
         paths = []
         with open(filename, 'r') as f:
             for line in f:
@@ -192,8 +192,14 @@ class DynamicMAPFVisualizer:
                 if not m:
                     continue
                 path_str = m.group(2)
-                coords = re.findall(r'\((\d+),(\d+)\)', path_str)
-                path = [(int(r), int(c)) for r, c in coords]
+                # Try to match (row,col,orientation)
+                coords = re.findall(r'\((\d+),(\d+),(\d+)\)', path_str)
+                if coords:
+                    path = [(int(r), int(c), int(o)) for r, c, o in coords]
+                else:
+                    # Fallback: match (row,col)
+                    coords = re.findall(r'\((\d+),(\d+)\)', path_str)
+                    path = [(int(r), int(c)) for r, c in coords]
                 paths.append(path)
         return paths
     
@@ -251,7 +257,7 @@ class DynamicMAPFVisualizer:
         return None
     
     def add_agent(self, start: Optional[Tuple[int, int]], goal: Optional[Tuple[int, int]]):
-        """Add a new agent and replan all paths"""
+        """Add a new agent and replan all paths (global replanning for all agents)."""
         if start is None or goal is None:
             print("Start or goal is None, cannot add agent.")
             return False
@@ -263,57 +269,48 @@ class DynamicMAPFVisualizer:
             if start == agent[0] or start == agent[1] or goal == agent[0] or goal == agent[1]:
                 print(f"Position already occupied: new agent start={start}, goal={goal} conflicts with agent id={agent[4]}, start={agent[0]}, goal={agent[1]}")
                 return False
-        
-        # Add new agent with temporary path
         agent_id = self.next_agent_id
         self.next_agent_id += 1
         temp_path = [start]  # Temporary path until replanning
-        
-        self.agents.append((start, goal, temp_path, (0,0,0), agent_id))  # Color will be set below
-        
-        
-        # Assign unique colors to all agents
+        self.agents.append((start, goal, temp_path, (0,0,0), agent_id))
         colors = self.get_agent_colors(len(self.agents))
         for i in range(len(self.agents)):
             start, goal, path, _, agent_id = self.agents[i]
             self.agents[i] = (start, goal, path, colors[i], agent_id)
-        
         # Pad the new agent's history with its start position for all previous timesteps
-        self.agent_histories.append([start] * self.global_timestep)
-    
-        # Replan all paths
+        if hasattr(self, 'agent_histories') and self.agent_histories and len(self.agent_histories[0]) > 0 and len(self.agent_histories[0][0]) == 3:
+            pad = (start[0], start[1], 0)
+        else:
+            pad = start if len(start) == 3 else (start[0], start[1], 0)
+        self.agent_histories.append([pad] * self.global_timestep)
         self.replan_all_paths()
         return True
-    
+
     def check_collisions(self):
-        """Check for collisions between agents and log them"""
+        """Check for collisions between agents (vertex and edge), ignoring orientation for vertex collisions"""
         collisions = []
-        
         for i, (start1, goal1, path1, color1, agent_id1) in enumerate(self.agents):
             for j, (start2, goal2, path2, color2, agent_id2) in enumerate(self.agents):
-                if i >= j:  # Avoid checking same pair twice
+                if i >= j:
                     continue
-                
-                # Check vertex collisions (same position at same time)
+                # Check vertex collisions (same position at same time, ignore orientation)
                 for t in range(min(len(path1), len(path2))):
-                    if path1[t] == path2[t]:
+                    if path1[t][:2] == path2[t][:2]:
                         collisions.append({
                             'type': 'vertex',
                             'agents': (agent_id1, agent_id2),
-                            'position': path1[t],
+                            'position': path1[t][:2],
                             'timestep': t
                         })
-                
-                # Check edge collisions (swapping positions)
+                # Check edge collisions (swapping positions, ignore orientation)
                 for t in range(min(len(path1) - 1, len(path2) - 1)):
-                    if (path1[t] == path2[t + 1] and path1[t + 1] == path2[t]):
+                    if (path1[t][:2] == path2[t + 1][:2] and path1[t + 1][:2] == path2[t][:2]):
                         collisions.append({
                             'type': 'edge',
                             'agents': (agent_id1, agent_id2),
-                            'positions': (path1[t], path1[t + 1]),
+                            'positions': (path1[t][:2], path1[t + 1][:2]),
                             'timestep': t
                         })
-        
         # Log collisions if any found
         if collisions:
             print(f"🚨 COLLISION DETECTED! Found {len(collisions)} collision(s):")
@@ -324,52 +321,33 @@ class DynamicMAPFVisualizer:
                     print(f"   Edge collision: Agents {collision['agents']} swapping positions {collision['positions']} at timestep {collision['timestep']}")
             return True
         else:
-            # print("✅ No collisions detected - all paths are collision-free!")
             return False
     
     def replan_all_paths(self):
         """Replan paths for all agents from their current positions at the current timestep"""
         if not self.agents:
             return
-        
-        # Use current position at current timestep for each agent as the new start
         starts = []
         goals = []
         for start, goal, path, color, agent_id in self.agents:
             if path and len(path) > 0:
-                # Use the agent's current position at the current frame
                 current_pos = path[min(self.frame, len(path) - 1)]
                 starts.append(current_pos)
             else:
                 starts.append(start)
             goals.append(goal)
-        
-        # Call pathfinder
         new_paths = self.call_pathfinder(starts, goals)
-        
         if new_paths and len(new_paths) == len(self.agents):
-            # Assign unique colors to all agents
             colors = self.get_agent_colors(len(self.agents))
-            # Update paths and colors
             for i, (start, goal, old_path, _, agent_id) in enumerate(self.agents):
                 if i < len(new_paths) and new_paths[i]:
                     self.agents[i] = (starts[i], goal, new_paths[i], colors[i], agent_id)
-                    # Update agent history:
-                    # - If agent_histories[i] is shorter than global_timestep, pad with last known position
-                    while len(self.agent_histories[i]) < self.global_timestep:
-                        self.agent_histories[i].append(self.agent_histories[i][-1])
-                    # - Now, append the new path (from current timestep onward)
-                    self.agent_histories[i] += new_paths[i][1:]  # [1:] to avoid duplicating current position
-            
-            # Update makespan
+                    # Replace agent history with the new path (with orientation)
+                    self.agent_histories[i] = list(new_paths[i])
             self.makespan = max(len(agent[2]) for agent in self.agents) if self.agents else 1
-            self.frame = 0  # Reset to 0 so all agents start from their new positions
-            
+            self.frame = 0
             print(f"Replanned paths for {len(self.agents)} agents, makespan: {self.makespan}")
-            
-            # Check for collisions after replanning
             self.check_collisions()
-            # After updating, write to paths.txt
             self.write_paths_txt()
         else:
             print("Pathfinding failed, keeping existing paths")
@@ -558,50 +536,42 @@ class DynamicMAPFVisualizer:
                 pass
     
     def check_collisions_at_timestep(self, timestep):
-        """Check for collisions at a specific timestep"""
+        """Check for collisions at a specific timestep, ignoring orientation for vertex collisions"""
         collisions = []
-        
         for i, (start1, goal1, path1, color1, agent_id1) in enumerate(self.agents):
             for j, (start2, goal2, path2, color2, agent_id2) in enumerate(self.agents):
-                if i >= j:  # Avoid checking same pair twice
+                if i >= j:
                     continue
-                
-                # Get positions at current timestep
                 if timestep < len(path1) and timestep < len(path2):
                     pos1 = path1[timestep]
                     pos2 = path2[timestep]
-                    
-                    # Check vertex collision
-                    if pos1 == pos2:
+                    # Check vertex collision (ignore orientation)
+                    if pos1[:2] == pos2[:2]:
                         collisions.append({
                             'type': 'vertex',
                             'agents': (agent_id1, agent_id2),
-                            'position': pos1,
+                            'position': pos1[:2],
                             'timestep': timestep
                         })
-                    
-                    # Check edge collision (swapping positions)
+                    # Check edge collision (ignore orientation)
                     if timestep + 1 < len(path1) and timestep + 1 < len(path2):
                         next_pos1 = path1[timestep + 1]
                         next_pos2 = path2[timestep + 1]
-                        if pos1 == next_pos2 and pos2 == next_pos1:
+                        if (pos1[:2] == next_pos2[:2] and pos2[:2] == next_pos1[:2]):
                             collisions.append({
                                 'type': 'edge',
                                 'agents': (agent_id1, agent_id2),
-                                'positions': (pos1, pos2),
+                                'positions': (pos1[:2], next_pos1[:2]),
                                 'timestep': timestep
                             })
-        
-        # Log collisions if any found
         if collisions:
             print(f"🚨 COLLISION AT TIMESTEP {timestep}! Found {len(collisions)} collision(s):")
             for collision in collisions:
                 if collision['type'] == 'vertex':
                     print(f"   Vertex collision: Agents {collision['agents']} at position {collision['position']}")
-                else:  # edge collision
+                else:
                     print(f"   Edge collision: Agents {collision['agents']} swapping positions {collision['positions']}")
             return True
-        
         return False
     
     def draw(self):
@@ -649,7 +619,12 @@ class DynamicMAPFVisualizer:
     def write_paths_txt(self):
         with open("paths.txt", "w") as f:
             for i, history in enumerate(self.agent_histories):
-                path_str = " -> ".join(f"({r},{c})" for r, c in history)
+                def format_entry(entry):
+                    if len(entry) == 3:
+                        return f"({entry[0]},{entry[1]},{entry[2]})"
+                    else:
+                        return f"({entry[0]},{entry[1]})"
+                path_str = " -> ".join(format_entry(e) for e in history)
                 f.write(f"Agent {i}: {path_str}\n")
 
     def _load_initial_agents_thread(self, scen_file, agent_num):
